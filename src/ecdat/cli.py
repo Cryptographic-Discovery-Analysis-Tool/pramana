@@ -97,6 +97,12 @@ from ecdat.risk.scenarios import (
     Policy,
     Scenario,
 )
+from ecdat.risk.sector import (
+    DEFAULT_AT_RISK_DAYS,
+    UnknownSectorError,
+    available_sectors,
+    sector_report,
+)
 from ecdat.context.binding import Lifetime
 from ecdat.assemble import Declarations, assemble
 from ecdat.store import DiffClass, InvalidRunIdError, JsonlRunStore, NoSuchRunError, Run
@@ -839,6 +845,99 @@ def _ledger_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def _sector_report_cmd(args: argparse.Namespace) -> int:
+    """India sector-specific compliance view (SIH26164): evaluates the same
+    ledger `ledger-run` does, then overlays `risk/sector.py`'s traffic light
+    for the sector the operator picked -- BFSI / Telecom / CII /
+    Government-general-enterprise. Never a second risk calculation."""
+    try:
+        subjects = _load_ledger_subjects(args.subjects)
+    except OSError as exc:
+        print(f"could not read subjects file {args.subjects!r}: {type(exc).__name__}", file=sys.stderr)
+        return 2
+    except (json.JSONDecodeError, KeyError) as exc:
+        print(f"subjects file {args.subjects!r} is malformed: {exc}", file=sys.stderr)
+        return 2
+
+    try:
+        scenario = Scenario.load(args.scenario)
+    except NoCitedScenarioError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    try:
+        policy = Policy(
+            capture_assumption=CaptureAssumption(
+                mode=CaptureMode(args.capture), since=args.capture_since
+            ),
+            rollout_Y_default=Lifetime(days=args.rollout_y_days),
+            accept_inferred_inputs=args.accept_inferred,
+        )
+    except ValueError as exc:
+        print(f"policy: {exc}", file=sys.stderr)
+        return 2
+
+    as_of = args.as_of or date.today()
+    result = evaluate_run(subjects, scenario=scenario, policy=policy, as_of=as_of)
+
+    try:
+        statuses = sector_report(
+            list(result.records),
+            sector_key=args.sector,
+            include_global=args.include_global,
+            at_risk_days=args.at_risk_days,
+        )
+    except UnknownSectorError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    if args.json:
+        print(
+            json.dumps(
+                [
+                    {
+                        "asset_id": s.asset_id,
+                        "sector": s.sector,
+                        "status": s.status.value,
+                        "reason": s.reason,
+                        "as_of": s.as_of.isoformat(),
+                        "record_ids": list(s.record_ids),
+                        "annotations": [
+                            {
+                                "policy": a.policy_key,
+                                "milestone": a.milestone_key,
+                                "deadline": a.deadline.isoformat(),
+                                "status": a.status.value,
+                                "days_remaining": a.days_remaining,
+                                "citation": a.citation,
+                            }
+                            for a in s.annotations
+                        ],
+                        "obligations": [
+                            {
+                                "policy": o.policy_key,
+                                "citation": o.citation,
+                                "quote": o.quote,
+                            }
+                            for o in s.obligations
+                        ],
+                    }
+                    for s in statuses
+                ],
+                indent=2,
+            )
+        )
+        return 0
+
+    print(f"sector={args.sector}  as_of={as_of.isoformat()}  {len(statuses)} asset(s)")
+    for s in statuses:
+        print(f"  [{s.status.value:11s}] {s.asset_id}: {s.reason}")
+        if s.obligations:
+            for o in s.obligations:
+                print(f"      obligation, no deadline: {o.policy_key} ({o.citation})")
+    return 0
+
+
 def _runs(args: argparse.Namespace) -> int:
     store = JsonlRunStore(args.store_dir)
     summaries = store.list_runs(target_id=args.target_id)
@@ -1168,6 +1267,62 @@ def main(argv: list[str] | None = None) -> int:
         "--store-dir", required=True, help="directory a JsonlRunStore reads and writes runs in"
     )
     ledger_run.set_defaults(func=_ledger_run)
+
+    sector_report_parser = subparsers.add_parser(
+        "sector-report",
+        help="India sector-specific compliance view: per-asset traffic light against the "
+        "policy deadlines a cited source (data/sector_profiles.yaml) says apply to the "
+        "selected sector (SIH26164)",
+    )
+    sector_report_parser.add_argument(
+        "--subjects",
+        required=True,
+        help="JSON file of LedgerSubjects -- same schema as ledger-run's --subjects",
+    )
+    sector_report_parser.add_argument(
+        "--sector",
+        required=True,
+        choices=sorted(available_sectors()),
+        help="which sector lens to apply",
+    )
+    sector_report_parser.add_argument("--scenario", required=True, help="a scenario id from data/scenarios.yaml")
+    sector_report_parser.add_argument(
+        "--capture",
+        default=CaptureMode.SINCE_CONFIRMED.value,
+        choices=[m.value for m in CaptureMode],
+        help="capture_assumption mode (§5.4); default SINCE_CONFIRMED, the conservative reading",
+    )
+    sector_report_parser.add_argument(
+        "--capture-since",
+        type=date.fromisoformat,
+        default=None,
+        help="required date when --capture=SINCE_DATE",
+    )
+    sector_report_parser.add_argument(
+        "--rollout-y-days",
+        type=int,
+        required=True,
+        help="rollout window Y in days; no cited default exists, so it must be supplied "
+        "explicitly, exactly like ledger-run",
+    )
+    sector_report_parser.add_argument("--accept-inferred", action="store_true")
+    sector_report_parser.add_argument(
+        "--as-of", type=date.fromisoformat, default=None, help="default: today"
+    )
+    sector_report_parser.add_argument(
+        "--include-global",
+        action="store_true",
+        help="also overlay the non-India global policy rows (NIST/EU/US/CA/DE)",
+    )
+    sector_report_parser.add_argument(
+        "--at-risk-days",
+        type=int,
+        default=DEFAULT_AT_RISK_DAYS,
+        help=f"days-before-deadline window counted as at-risk (engineering choice, "
+        f"not a citation; default {DEFAULT_AT_RISK_DAYS})",
+    )
+    sector_report_parser.add_argument("--json", action="store_true")
+    sector_report_parser.set_defaults(func=_sector_report_cmd)
 
     runs_parser = subparsers.add_parser("runs", help="list runs in a store (build-plan.md P13)")
     runs_parser.add_argument("--store-dir", required=True)

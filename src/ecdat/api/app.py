@@ -55,6 +55,13 @@ from ecdat.risk.scenarios import (
     Scenario,
 )
 from ecdat.risk.policy import annotate as annotate_policies
+from ecdat.risk.sector import (
+    DEFAULT_AT_RISK_DAYS,
+    UnknownSectorError,
+    available_sectors,
+    load_sector_profiles,
+    sector_report,
+)
 from ecdat.risk.sensitivity import sensitivity_for
 from ecdat.security.audit import AuditLog, InMemoryAuditLog, Verb, entry_for
 from ecdat.security.auth import AuthError, InsufficientRoleError, Principal, Role, TokenRegistry
@@ -447,6 +454,103 @@ def create_app(
                 band.value: sum(1 for r in result.records if r.band == band)
                 for band in ExposureBand
                 if any(r.band == band for r in result.records)
+            },
+        }
+
+    @app.get("/api/sectors")
+    def sectors(principal: Principal = Depends(require_viewer)) -> dict[str, Any]:
+        """India sector lenses (SIH26164): the sectors a cited source
+        (data/sector_profiles.yaml) says have their own compliance obligations,
+        and which policy rows apply to each -- for the dashboard's sector
+        picker to render without hardcoding the list."""
+        return {
+            "sectors": [
+                {
+                    "key": profile.key,
+                    "label": profile.label,
+                    "citation": profile.citation,
+                    "quote": profile.quote,
+                    "policies": [
+                        {
+                            "policy_key": p.policy_key,
+                            "citation": p.citation,
+                            "quote": p.quote,
+                        }
+                        for p in profile.policies
+                    ],
+                }
+                for profile in load_sector_profiles()
+            ],
+            "default_at_risk_days": DEFAULT_AT_RISK_DAYS,
+        }
+
+    @app.get("/api/sector-report")
+    def sector_report_endpoint(
+        sector: str = Query(...),
+        scenario: str = Query(...),
+        capture: CaptureMode = Query(CaptureMode.SINCE_CONFIRMED),
+        since: date | None = Query(None),
+        accept_inferred: bool = Query(False),
+        rollout_y_days: int = Query(..., ge=0),
+        as_of: date | None = Query(None),
+        include_global: bool = Query(False),
+        at_risk_days: int = Query(DEFAULT_AT_RISK_DAYS, ge=0),
+        principal: Principal = Depends(require_viewer),
+    ) -> dict[str, Any]:
+        """Per-asset traffic light for one sector (SIH26164). Evaluates the
+        same ledger `/api/ledger` does, then overlays `risk/sector.py` --
+        never a second risk calculation, and the band a row already has never
+        moves because of this endpoint."""
+        result = run(scenario, capture, since, accept_inferred, rollout_y_days, as_of)
+        try:
+            statuses = sector_report(
+                list(result.records),
+                sector_key=sector,
+                include_global=include_global,
+                at_risk_days=at_risk_days,
+            )
+        except UnknownSectorError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+
+        return {
+            "sector": sector,
+            "scenario_id": result.scenario_id,
+            "as_of": result.as_of.isoformat(),
+            "assets": [
+                {
+                    "asset_id": s.asset_id,
+                    "status": s.status.value,
+                    "reason": s.reason,
+                    "record_ids": list(s.record_ids),
+                    "annotations": [
+                        {
+                            "policy": a.policy_key,
+                            "policy_label": a.policy_label,
+                            "milestone": a.milestone_key,
+                            "milestone_label": a.milestone_label,
+                            "deadline": a.deadline.isoformat(),
+                            "status": a.status.value,
+                            "days_remaining": a.days_remaining,
+                            "reason": a.reason,
+                            "citation": a.citation,
+                        }
+                        for a in s.annotations
+                    ],
+                    "obligations": [
+                        {
+                            "policy": o.policy_key,
+                            "citation": o.citation,
+                            "quote": o.quote,
+                        }
+                        for o in s.obligations
+                    ],
+                }
+                for s in statuses
+            ],
+            "counts": {
+                status_value: sum(1 for s in statuses if s.status.value == status_value)
+                for status_value in ("on_track", "at_risk", "overdue", "no_deadline")
+                if any(s.status.value == status_value for s in statuses)
             },
         }
 

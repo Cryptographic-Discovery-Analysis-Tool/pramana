@@ -580,3 +580,61 @@ under --strict" amendment is not implemented for either adapter (pre-existing ga
 or worsened here: `RECORDED_VERSIONS` still raises unconditionally); out of scope for this task
 since the live tool versions available here are exactly the recorded ones (semgrep 1.99.0, trivy
 0.74.0) and the gap was never exercised.
+
+## DEV-016 — India sector-specific compliance views: new scope beyond build-plan.md's numbered phases (2026-09-27)
+
+**Issue.** build-plan.md's phases stop at P26 (order P21 -> P22 -> P23 -> P24 -> P25 -> P26); no
+phase reserves "sector views". This task -- SIH26164's user-facing ask for a BFSI / Telecom / CII
+/ Government-general-enterprise lens over the P22 policy overlay -- is additive scope layered on
+P22's already-cited `data/policy_deadlines.yaml` and `risk/policy.py`, not a numbered phase.
+Recorded here per CLAUDE.md's "any departure from build-plan.md ... gets a DEV-NNN entry".
+
+**What was added.**
+- `data/sector_profiles.yaml` -- a new cited registry, same `usable`/`citation`/`quote` shape as
+  every other `data/` file, checked by `tools/ci/check_data_citations.py` without any change to
+  that script (it recurses any dict carrying `usable`, so the sector-to-policy mapping rows and
+  the sector rows themselves were picked up for free).
+- Three new `usable: false` rows in `data/policy_deadlines.yaml` (`IN_RBI_CYBERSEC_MD`,
+  `IN_RBI_QSAFE`, `IN_TEC_PQC`) alongside the existing `IN_SEBI_CSCRF` pattern: real primary
+  sources with no calendar-dated PQC milestone, recorded honestly rather than assigned an invented
+  date.
+- `src/ecdat/risk/sector.py` -- a pure overlay on `risk/policy.py`'s `annotate()`, exactly as
+  P22's policy overlay is a pure overlay on a `CalculationRecord`'s band: it adds a traffic light
+  (`on_track`/`at_risk`/`overdue`/`no_deadline`) computed only from `PolicyAnnotation.status` and
+  `days_remaining`, never a second risk calculation and never a change to any record's `band`.
+  `at_risk_days` (default 180) is an explicit, overridable engineering threshold, not a citation --
+  documented as such in the module docstring, the same way `data/base_confidence.yaml`'s
+  "engineering estimate, no published benchmark" rows are labelled rather than hidden.
+- `ecdat sector-report` (CLI), `GET /api/sectors` and `GET /api/sector-report` (API), and a new
+  "Sector view" tab in the dashboard (`ui/dashboard/src/Sector.jsx`), all presentation/orchestration
+  over `risk/sector.py` -- no band or deadline is computed in the CLI, API, or dashboard layers.
+
+**Source-verification limitations, recorded rather than hidden.**
+- `docs/sources/IN_RBI_Cybersecurity_TRRA_MD_2026.md` (RBI/DoS/2026-27/410, commercial banks
+  Master Direction, 31 Jul 2026): reached only through the RBI website's ASPX viewer via the fetch
+  tool's HTML pipeline; no independently vendored PDF/SHA-256 was obtained for this one source
+  (`rbidocs.rbi.org.in`'s direct PDF path returned a CAPTCHA/bot-check page from this environment).
+  Its one cryptography-relevant paragraph (140: "strong" key length/algorithms, no deprecated
+  standards) states no PQC-specific date, so it is `usable: false` in `data/policy_deadlines.yaml`
+  and appears only as an undated BFSI obligation.
+- `docs/sources/IN_RBI_QSAFE_Committee_2026.md` (RBI Press Release 2026-2027/325, Q-SAFE
+  committee): the canonical `rbidocs.rbi.org.in` PDF URL was also CAPTCHA-blocked; the same PDF
+  (same filename, matching RBI's press-release naming convention, RBI Department of Communication
+  letterhead reproduced in the fetched bytes) was retrieved via a news outlet's re-hosted copy
+  instead, with its own SHA-256 recorded. The committee's own reporting deadline ("six months from
+  the date of its first meeting") is relative, not a calendar date, and that first-meeting date was
+  not found, so no milestone date was invented.
+- `docs/sources/IN_TEC_PQC_Migration_Report_2025.md` (TEC 910018:2025) and a search for a separate
+  DoT mandate requiring PQC readiness for new telecom equipment from 2026: the TEC report itself
+  was fetched and fully read (34 pages, `pypdf`), and is advisory/technical, not a mandate, with no
+  compliance date found; no separate DoT circular with a 2026 PQC-readiness mandate was found by
+  web search, so none is cited and none is invented. Recorded as `usable: false` accordingly.
+- The DST roadmap's "CBOM mandatory FY2027-28" milestone (already noted as undated in the roadmap's
+  own vendored excerpt) remains undated in `data/policy_deadlines.yaml` for the same reason: FY2027
+  -28 names no day, and `risk/policy.py`'s `Milestone.date` is a calendar `date`.
+
+**Not attempted.** No ADR was written for this addition -- it does not resolve an architecture
+ambiguity in the Lock/harness/Final-Architecture sense ADR-001 through ADR-005 exist for; it is a
+straightforward additive data-plus-overlay feature in the same shape P22's policy overlay already
+established, so a DEV-NNN entry was judged the correct record per CLAUDE.md's own distinction
+between the two mechanisms.
