@@ -69,6 +69,7 @@ from ecdat.adapters.kms.adapter import KmsAdapter, KmsProbeBundle
 from ecdat.adapters.kms.adapter import live_kms_runner
 from ecdat.adapters.images.adapter import ImagesAdapter
 from ecdat.adapters.images.adapter import live_file_reader, live_theia_runner
+from ecdat.adapters.k8s_secret.adapter import K8sSecretAdapter
 from ecdat.adapters.packages.adapter import PackagesAdapter, TrivyScanBundle
 from ecdat.adapters.packages.adapter import live_scan_runner as live_packages_runner
 from ecdat.adapters.source.semgrep import SemgrepSourceAdapter
@@ -113,6 +114,7 @@ ADAPTERS: dict[str, type[Adapter]] = {
     HsmPkcs11Adapter.adapter_id: HsmPkcs11Adapter,
     KmsAdapter.adapter_id: KmsAdapter,
     BinaryAdapter.adapter_id: BinaryAdapter,
+    K8sSecretAdapter.adapter_id: K8sSecretAdapter,
 }
 
 #: Path to this repository's own YARA rules, used as `binary-yara-readelf`'s
@@ -166,6 +168,13 @@ def _build_certs(args: argparse.Namespace, basis: ConfidenceBasis) -> tuple[Adap
     adapter = CertificateAdapter(
         base_confidence=args.confidence, confidence_basis=basis, keystore_password=password
     )
+    return adapter, ScanTarget(target_id=args.target_id, locator=args.input)
+
+
+def _build_k8s_secret(args: argparse.Namespace, basis: ConfidenceBasis) -> tuple[Adapter, ScanTarget]:
+    if not args.input:
+        raise CliUsageError("k8s-secret requires --input <manifest file or directory>")
+    adapter = K8sSecretAdapter(base_confidence=args.confidence, confidence_basis=basis)
     return adapter, ScanTarget(target_id=args.target_id, locator=args.input)
 
 
@@ -376,6 +385,7 @@ BUILDERS: dict[str, Callable[[argparse.Namespace, ConfidenceBasis], tuple[Adapte
     SemgrepSourceAdapter.adapter_id: _build_semgrep,
     CertificateAdapter.adapter_id: _build_certs,
     ConfigChainAdapter.adapter_id: _build_config,
+    K8sSecretAdapter.adapter_id: _build_k8s_secret,
     PackagesAdapter.adapter_id: _build_packages,
     ImagesAdapter.adapter_id: _build_images,
     HsmPkcs11Adapter.adapter_id: _build_hsm,

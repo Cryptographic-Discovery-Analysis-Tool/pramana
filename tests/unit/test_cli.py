@@ -58,10 +58,10 @@ def _run(argv: list[str], out_path: Path, capsys) -> dict:
 
 def test_every_declared_adapter_has_a_cli_builder():
     """The whole point of this task: no adapter exists that the CLI cannot
-    reach. If a ninth adapter is ever added without a BUILDERS entry, this
-    fails immediately instead of silently leaving it unreachable."""
+    reach. If an eleventh adapter is ever added without a BUILDERS entry,
+    this fails immediately instead of silently leaving it unreachable."""
     assert set(ADAPTERS) == set(BUILDERS)
-    assert len(ADAPTERS) == 9
+    assert len(ADAPTERS) == 10
 
 
 # --- adapters that read a local path directly ----------------------------------
