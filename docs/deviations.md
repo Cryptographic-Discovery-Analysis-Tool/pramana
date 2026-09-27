@@ -476,3 +476,107 @@ deliberately feeds the adapter a real PEM private key text and asserts the *seri
 never contains the PEM block, base64 key bytes, or `-----BEGIN`. `python -m pytest -q` and every
 `tools/ci/check_*.py` are re-verified green in the same session this entry was added (see the
 session's final numbers).
+
+## DEV-015 — generic external-tool launcher, so `source-semgrep`/`packages-trivy` `--live` run
+through WSL on a Windows dev machine (2026-09-27)
+
+**Context.** OI-009 records that semgrep does not install on native Windows Python and was
+worked around by shelling out inside this machine's WSL Ubuntu distro. That workaround was never
+generalised into the adapters themselves: `packages-trivy --live` shelled out to a bare `trivy`
+on `PATH`, with no way to route it through WSL, and `source-semgrep` had **no live path at all**
+-- it could only replay a recorded JSON file (`_scan` read `target.locator` as a file, full stop).
+On this Windows box neither adapter could actually run its tool for real without going through
+WSL by hand outside ecdat entirely. This session's task: make both run live using the WSL tools
+already installed (semgrep 1.99.0, trivy 0.74.0 -- the exact recorded versions), generically, not
+by hardcoding WSL into either adapter.
+
+**Resolution.** New `adapters/live_launcher.py`, with no adapter-specific knowledge in it at all:
+
+- `resolve_launcher_prefix(tool)` -- `ECDAT_<TOOL>_LAUNCHER` (e.g. `ECDAT_SEMGREP_LAUNCHER`) wins
+  over the generic `ECDAT_TOOL_LAUNCHER`; `shlex.split` turns `"wsl -e"` into `["wsl", "-e"]`,
+  prepended to the tool's own pinned argv. Empty/unset (the CI/Linux/macOS default) means no
+  prefix -- behaviour is unchanged from before this session on any machine that does not set
+  these.
+- `resolve_tool_bin(tool, default)` -- `ECDAT_<TOOL>_BIN` names the binary inside the launched
+  environment (mirrors the existing `tls.adapter.ECDAT_OPENSSL_BIN` convention, generalised).
+- `resolve_path_translator(tool, launcher_prefix)` -- a `PathTranslator` (`to_tool`/`from_tool`).
+  `WslPathTranslator` is pure string logic (`C:\...` <-> `/mnt/c/...`, no `wslpath` subprocess, so
+  it is testable with no WSL installed) and is inferred automatically when the resolved launcher's
+  first token is literally `"wsl"`; anything else defaults to `IdentityPathTranslator` (no-op)
+  unless `ECDAT_<TOOL>_PATH_TRANSLATE` forces one. WSL is one launcher this project has a
+  translator for -- the mechanism itself (`build_launched_argv`) has no WSL-specific code.
+
+Both adapters now take an injected `scan_runner`/`ScanRunner`, exactly the seam
+`packages.adapter.PackagesAdapter` already used:
+
+- `packages/adapter.py`: `live_scan_runner()` gained `launcher_prefix`/`trivy_bin`/
+  `path_translator` (defaulting to resolving from the env vars above) and a `subprocess_runner`
+  injection point for tests. `target.locator` and `offline_db_path` are translated `to_tool`
+  before `build_trivy_argv`; every path trivy reports back (`ArtifactName`, each package's
+  `FilePath`) is translated `from_tool` before the adapter ever builds a `Finding`, so a live WSL
+  run's findings carry the same Windows-relative paths a replay run would.
+- `source/semgrep.py`: this is new -- `SemgrepSourceAdapter.__init__` gained an optional
+  `scan_runner: ScanRunner | None = None` (default `None` keeps every existing replay caller and
+  test unchanged: no runner means `target.locator` is read as a file, same as before). `parse()`
+  gained an optional `path_translator` parameter applied to `coverage.scanned`/`skipped` and every
+  result's `path` before grouping. `build_semgrep_argv()` pins CLAUDE.md's security defaults
+  exactly (`--config rules/semgrep`, never `--config=auto`; `--json`; `--metrics=off`;
+  `--timeout`; `--max-target-bytes`); `live_scan_runner()` also sets `SEMGREP_SEND_METRICS=off` on
+  the subprocess's own environment (not this process's `os.environ`), and treats semgrep's own
+  exit code 1 ("findings were reported") as success, not a failure.
+- Both `subprocess.run` calls now pass `encoding="utf-8", errors="replace"` explicitly. Without
+  it, a live run on this Windows machine intermittently raised `UnicodeDecodeError` from
+  `subprocess`'s own stderr-reader thread (`cp1252` cannot decode a UTF-8 byte WSL's semgrep wrote
+  to stderr) -- `text=True` alone uses the platform's locale encoding, which is `cp1252` on
+  Windows, not UTF-8. Observed live during this session, not assumed.
+- `tool_version` in both adapters' `RawCapture` continues to come from the tool's own output
+  (semgrep's JSON `"version"` key; trivy's `Trivy.Version`/schema block) exactly as before -- no
+  new version-detection subprocess call was needed, since both already recorded it this way.
+- `cli.py`: `_build_semgrep` gained a `--live` branch (`live_semgrep_runner()` when `--live`, else
+  the existing file-read path) mirroring `_build_packages`'s existing shape.
+
+**Verification, live, this session, on this Windows machine with `ECDAT_SEMGREP_LAUNCHER="wsl -e"`
+`ECDAT_TRIVY_LAUNCHER="wsl -e"`:**
+
+- `ecdat scan --adapter source-semgrep --live --input <harness>/targets/payments/payment-gateway/src`
+  produced exactly the 5 findings the recorded `ecdat-rules/tier-a-java.raw.json` fixture's own
+  README table lists (same rule, same file, same line, same captured value, for all five: the
+  `config_binding_prefix`, the non-literal `KeyWrapService` call, and the three literal algorithm
+  call sites), and `--input <harness>/targets/controls/no-crypto-service` produced 0
+  findings/0 files scanned, matching the fixture's TRAP-07 "did not look" case exactly.
+- `ecdat scan --adapter packages-trivy --live --input <harness>/targets/controls/no-crypto-service`
+  completed against WSL's already-cached `~/.cache/trivy/db` (`--skip-db-update`, no network
+  needed) with 0 packages found -- confirms the live wiring itself (launcher + path translation +
+  argv) works end to end.
+- `harness/eval/run_ecdat.py --live` (see harness-side change below) ran `source-semgrep --live`
+  and printed a live-vs-replay comparison: identical findings by content (same fields, same
+  values, same epistemic states) for all 5; the only difference was the `path` field's literal
+  string -- the live run's path is a Windows absolute path (`C:\Atharv's Stack\...\TokenVault.java`,
+  translated back by `WslPathTranslator.from_tool`), while the *recorded fixture* itself stores
+  `/mnt/c/Atharv's Stack/...` (it was recorded by running semgrep directly inside WSL against this
+  checkout in 2026-09-17, with no translation layer existing at that time) -- a path-representation
+  difference from how the fixture happened to be captured, not a difference in what either run
+  actually found. Recorded here rather than "fixed" by editing the fixture or the ground truth.
+
+**Blocked, reported rather than worked around: `packages-trivy --live` against the real
+payment-gateway fat jar.** The recorded trivy fixture was captured against `mvn package`'s fat
+jar. This sandboxed session has no network egress at all (verified: `mvn package` inside WSL fails
+with `Unknown host repo.maven.apache.org: Temporary failure in name resolution`, and no native
+Windows Maven is installed to try instead), and no `~/.m2` cache exists in this WSL distro to
+build offline from, so the jar cannot be built here. `harness/eval/run_ecdat.py --live` detects
+this (`_find_payment_gateway_jar` finds nothing under `target/`), prints the exact command to run
+once network access is available (`cd <payment-gateway> && mvn -q package -DskipTests`, from
+either a Windows shell with Maven on `PATH` or inside WSL), and falls back to the recorded trivy
+fixture for that one adapter so the rest of the run still completes and scores. This is the same
+"report as blocked" treatment this session's brief specified for anything needing Docker/network
+it does not have -- not silently skipped, not worked around with a different, unverified target.
+
+**Scope not attempted.** No CLI flag was added for the launcher prefix/bin/translator (env vars
+only) -- the task allowed either, and env vars compose more simply with `harness/eval/run_ecdat.py`
+invoking `ecdat scan` as a subprocess (the launcher config is simply inherited from the parent
+shell's environment, no argv plumbing needed through the harness script at all). CLAUDE.md's
+anti-hallucination "attach a VisibilityEntry warning for an unrecorded tool version, raise only
+under --strict" amendment is not implemented for either adapter (pre-existing gap, not introduced
+or worsened here: `RECORDED_VERSIONS` still raises unconditionally); out of scope for this task
+since the live tool versions available here are exactly the recorded ones (semgrep 1.99.0, trivy
+0.74.0) and the gap was never exercised.

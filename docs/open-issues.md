@@ -485,6 +485,43 @@ semgrep 1.99.0 is installed on the build box and `semgrep --version` reports
 `1.99.0`. The Windows limitation is unchanged and irrelevant now: scanning
 happens on the box.
 
+**Update 2026-09-27 (DEV-015): `ecdat scan --adapter source-semgrep --live`
+now works on this Windows machine through WSL, generically.** The adapter-
+level gap this original entry described -- `source-semgrep` had no live path
+at all, and `packages-trivy --live` could not be routed through WSL -- is
+closed. Working commands, from a Windows shell (Git Bash or PowerShell):
+
+```bash
+ECDAT_SEMGREP_LAUNCHER="wsl -e" python -m ecdat.cli scan \
+  --adapter source-semgrep --live \
+  --input "<harness>/targets/payments/payment-gateway/src" \
+  --target-id tier-a --confidence 0.9 --confidence-justification "..."
+
+ECDAT_TRIVY_LAUNCHER="wsl -e" python -m ecdat.cli scan \
+  --adapter packages-trivy --live \
+  --input "<directory containing the built payment-gateway fat jar>" \
+  --target-id tier-a --confidence 0.9 --confidence-justification "..."
+```
+
+`ECDAT_SEMGREP_LAUNCHER`/`ECDAT_TRIVY_LAUNCHER` (or the generic
+`ECDAT_TOOL_LAUNCHER`) prepend `wsl -e` to the pinned argv; Windows paths in
+`--input` are translated to `/mnt/c/...` before being handed to the tool, and
+every path either tool reports back is translated back to a Windows path
+before a `Finding` is built -- see `adapters/live_launcher.py` and DEV-015.
+Verified live this session: `source-semgrep --live` reproduced the recorded
+`tier-a-java.raw.json` fixture's 5 findings exactly (same rule/file/line/
+value for all five). `packages-trivy --live` was verified against the
+zero-package negative control (`targets/controls/no-crypto-service`, 0
+packages, offline against WSL's already-cached vulnerability DB); the
+positive case against the real payment-gateway fat jar could not be verified
+in this session because building that jar needs network access to Maven
+Central, which this sandboxed session does not have (see DEV-015's
+"Blocked" section) -- not a limitation of the live-scan wiring itself, which
+the negative control already exercises end to end.
+
+`harness/eval/run_ecdat.py --live` runs both adapters live (when the fat
+jar is available for trivy) and prints a live-vs-replay comparison.
+
 ---
 
 ## OI-014 — Host OpenSSL is 3.0.13; the fixtures were recorded against 3.5.4 (2026-09-19)

@@ -354,3 +354,130 @@ def test_the_adapter_carries_no_harness_identifiers():
     text = inspect.getsource(module).lower()
     for token in ("meridian", "ecdat-harness", "targets/"):
         assert token not in text
+
+
+# --- live mode: argv shape, launcher composition, path translation -----------
+# No real semgrep and no real WSL anywhere below: build_semgrep_argv is a pure
+# function, and live_scan_runner takes an injected subprocess_runner exactly
+# as packages.adapter.live_scan_runner does.
+
+
+from ecdat.adapters.source.semgrep import (  # noqa: E402
+    SemgrepScanBundle,
+    build_semgrep_argv,
+    live_scan_runner,
+)
+
+
+def test_live_argv_pins_the_security_defaults_from_claude_md():
+    argv = build_semgrep_argv("/some/target")
+
+    assert argv[0] == "semgrep"
+    assert "--config" in argv
+    assert argv[argv.index("--config") + 1] == "rules/semgrep", (
+        "CLAUDE.md: '--config rules/semgrep only' -- never --config=auto, which "
+        "pulls Registry rules over the network"
+    )
+    assert "--json" in argv
+    assert "--metrics=off" in argv
+    assert "--timeout" in argv
+    assert "--max-target-bytes" in argv
+    assert argv[-1] == "/some/target"
+
+
+def test_live_argv_uses_a_configured_semgrep_bin():
+    argv = build_semgrep_argv("/some/target", semgrep_bin="/usr/local/bin/semgrep")
+    assert argv[0] == "/usr/local/bin/semgrep"
+
+
+class _FakeCompleted:
+    def __init__(self, *, stdout: str, returncode: int, stderr: str = ""):
+        self.stdout = stdout
+        self.returncode = returncode
+        self.stderr = stderr
+
+
+def test_live_scan_runner_composes_the_launcher_prefix_and_translates_the_locator(monkeypatch):
+    monkeypatch.setenv("ECDAT_SEMGREP_LAUNCHER", "wsl -e")
+    monkeypatch.delenv("ECDAT_TOOL_LAUNCHER", raising=False)
+    captured = {}
+
+    def fake_run(argv, **kwargs):
+        captured["argv"] = argv
+        captured["env"] = kwargs.get("env")
+        return _FakeCompleted(stdout='{"version": "1.99.0", "results": [], "paths": {}}', returncode=0)
+
+    runner = live_scan_runner(subprocess_runner=fake_run)
+    runner(ScanTarget(target_id="t", locator=r"C:\Atharv's Stack\ECDAT\ecdat\src"))
+
+    argv = captured["argv"]
+    assert argv[:2] == ["wsl", "-e"]
+    assert argv[2] == "semgrep"
+    assert argv[-1] == "/mnt/c/Atharv's Stack/ECDAT/ecdat/src"
+    assert captured["env"]["SEMGREP_SEND_METRICS"] == "off"
+
+
+def test_live_scan_runner_accepts_exit_code_1_as_findings_not_a_failure(monkeypatch):
+    """Semgrep's own convention: exit 1 means findings were reported, not an
+    error -- only other nonzero codes are real failures."""
+
+    def fake_run(argv, **kwargs):
+        return _FakeCompleted(stdout='{"version": "1.99.0", "results": [], "paths": {}}', returncode=1)
+
+    runner = live_scan_runner(subprocess_runner=fake_run)
+    bundle = runner(ScanTarget(target_id="t", locator="/some/target"))
+    assert bundle.stdout_json
+
+
+def test_live_scan_runner_raises_on_a_real_failure_exit_code(monkeypatch):
+    from ecdat.adapters.source.semgrep import SemgrepInvocationError
+
+    def fake_run(argv, **kwargs):
+        return _FakeCompleted(stdout="", returncode=2)
+
+    runner = live_scan_runner(subprocess_runner=fake_run)
+    with pytest.raises(SemgrepInvocationError):
+        runner(ScanTarget(target_id="t", locator="/some/target"))
+
+
+def test_adapter_run_with_a_live_scan_runner_translates_result_paths_back_to_windows(monkeypatch):
+    """End to end: a WSL-style live run must produce findings whose `path`
+    field is a Windows path, exactly like a replay run over the same target,
+    so the harness can join on it the same way either way."""
+    document = {
+        "version": "1.99.0",
+        "paths": {"scanned": ["/mnt/c/repo/src/Foo.java"], "skipped": []},
+        "results": [
+            {
+                "check_id": "rules.crypto-call-literal-algorithm",
+                "path": "/mnt/c/repo/src/Foo.java",
+                "start": {"line": 10, "col": 5},
+                "end": {"line": 10, "col": 30},
+                "extra": {
+                    "lines": 'MessageDigest.getInstance("MD5")',
+                    "metavars": {"$ALGO": {"abstract_content": '"MD5"'}},
+                },
+            }
+        ],
+    }
+
+    def fake_run(argv, **kwargs):
+        return _FakeCompleted(stdout=json.dumps(document), returncode=0)
+
+    runner = live_scan_runner(subprocess_runner=fake_run, launcher_prefix=["wsl", "-e"])
+    adapter = SemgrepSourceAdapter(
+        base_confidence=TEST_CONFIDENCE, confidence_basis=TEST_BASIS, scan_runner=runner
+    )
+    result = adapter.run(ScanTarget(target_id="t", locator=r"C:\repo\src"))
+
+    assert result.coverage.scanned == (r"C:\repo\src\Foo.java",)
+    assert result.findings[0].fields["path"].value == r"C:\repo\src\Foo.java"
+    assert result.findings[0].fields["algorithm"].value == "MD5"
+
+
+def test_a_replay_caller_is_unaffected_by_the_new_optional_scan_runner():
+    """Backward compatibility: every existing caller that never passes
+    scan_runner keeps reading target.locator as a file directly."""
+    result = _run(TIER_A)
+    assert result.outcome == AdapterOutcome.COMPLETED
+    assert result.findings

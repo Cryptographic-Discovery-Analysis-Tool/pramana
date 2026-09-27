@@ -8,9 +8,10 @@ The run document is the only thing a scorer ever sees. ECDAT itself never reads
 ground truth -- the join between a run and planted truth happens on the harness
 side, so the tool cannot be tuned against the answer key.
 
-**Eight adapters, two very different shapes.** `certs-x509`, `config-chain-spring`
-and `source-semgrep` read a local path directly -- `--input` *is* the target.
-The other five (`packages-trivy`, `images-cbomkit-theia`, `hsm-pkcs11`,
+**Eight adapters, two very different shapes.** `certs-x509` and
+`config-chain-spring` read a local path directly -- `--input` *is* the
+target, with no live/replay distinction. The other six (`packages-trivy`,
+`source-semgrep`, `images-cbomkit-theia`, `hsm-pkcs11`,
 `binary-yara-readelf`, `tls-endpoint`) wrap a real tool behind a "runner"
 (CLAUDE.md's subprocess-injection pattern, see each adapter's own module):
 pass `--live` to actually shell out to that tool with its pinned flags, or
@@ -24,6 +25,14 @@ separate, larger, still-open piece of work (see the note above this
 docstring's `correlate` section) -- `tools/prober/` remains the reference
 for a coordinated sslyze+openssl vantage this single-process CLI does not
 attempt to replicate.
+
+`source-semgrep --live` and `packages-trivy --live` can both be routed
+through an external launcher (e.g. WSL on a Windows dev machine, OI-009) via
+`ECDAT_TOOL_LAUNCHER`/`ECDAT_<TOOL>_LAUNCHER`, `ECDAT_<TOOL>_BIN`, and
+`ECDAT_<TOOL>_PATH_TRANSLATE` -- see `adapters/live_launcher.py`. `--input`
+under `--live` is a directory to scan, translated into the launched
+environment's own path convention when a launcher is configured; nothing
+here hardcodes WSL.
 
 `tls-endpoint --live` (DEV-004 + DEV-013) runs the openssl-only probes for
 real: the full-offer and classical-only `s_client` handshakes and one
@@ -73,6 +82,7 @@ from ecdat.adapters.k8s_secret.adapter import K8sSecretAdapter
 from ecdat.adapters.packages.adapter import PackagesAdapter, TrivyScanBundle
 from ecdat.adapters.packages.adapter import live_scan_runner as live_packages_runner
 from ecdat.adapters.source.semgrep import SemgrepSourceAdapter
+from ecdat.adapters.source.semgrep import live_scan_runner as live_semgrep_runner
 from ecdat.adapters.tls.adapter import TlsEndpointAdapter, TlsProbeBundle
 from ecdat.adapters.tls.adapter import live_tls_probe_runner
 from ecdat.correlation.engine import CorrelationReport, ForbiddenEdgeError, correlate
@@ -156,8 +166,14 @@ def _read_optional_path(path: str | None) -> str | None:
 
 def _build_semgrep(args: argparse.Namespace, basis: ConfidenceBasis) -> tuple[Adapter, ScanTarget]:
     if not args.input:
-        raise CliUsageError("source-semgrep requires --input <recorded semgrep JSON file>")
-    adapter = SemgrepSourceAdapter(base_confidence=args.confidence, confidence_basis=basis)
+        raise CliUsageError(
+            "source-semgrep requires --input <directory to scan, with --live> or "
+            "<recorded semgrep JSON file, without --live>"
+        )
+    runner = live_semgrep_runner() if args.live else None
+    adapter = SemgrepSourceAdapter(
+        base_confidence=args.confidence, confidence_basis=basis, scan_runner=runner
+    )
     return adapter, ScanTarget(target_id=args.target_id, locator=args.input)
 
 
@@ -977,9 +993,12 @@ def main(argv: list[str] | None = None) -> int:
     scan.add_argument(
         "--live",
         action="store_true",
-        help="packages-trivy / images-cbomkit-theia / hsm-pkcs11 / binary-yara-readelf / "
-        "tls-endpoint only: actually shell out to the real tool instead of replaying --input "
-        "(tls-endpoint --live is openssl only -- see --openssl-bin and this module's docstring)",
+        help="packages-trivy / source-semgrep / images-cbomkit-theia / hsm-pkcs11 / "
+        "binary-yara-readelf / tls-endpoint only: actually shell out to the real tool instead of "
+        "replaying --input (tls-endpoint --live is openssl only -- see --openssl-bin and this "
+        "module's docstring; packages-trivy/source-semgrep --live can be routed through "
+        "ECDAT_TOOL_LAUNCHER/ECDAT_<TOOL>_LAUNCHER, e.g. WSL on Windows -- see "
+        "adapters/live_launcher.py)",
     )
 
     # config-chain-spring
