@@ -2,7 +2,7 @@
   "invalid_server_strings": [],
   "server_scan_results": [
     {
-      "uuid": "67b4059b-2505-4918-879f-1fd1e17aa91c",
+      "uuid": "b4e48b09-1169-41d5-b4da-dd1b33f9217d",
       "server_location": {
         "hostname": "pay-edge",
         "port": 8443,
@@ -38,13 +38,13 @@
               {
                 "received_certificate_chain": [
                   {
-                    "as_pem": "-----BEGIN CERTIFICATE-----\nMIICCTCCAY6gAwIBAgICEAMwCgYIKoZIzj0EAwIwTjEmMCQGA1UECgwdSGFybmVz\ncyBJbnRlcm1lZGlhdGUgQ0EgKEVDQykxJDAiBgNVBAMMG0hhcm5lc3MgSW50ZXJt\nZWRpYXRlIENBIEVDQzAeFw0yNjA5MDEwMDAwMDBaFw0yNjExMzAwMDAwMDBaMC4x\nGTAXBgNVBAoMEEhhcm5lc3MgUGF5bWVudHMxETAPBgNVBAMMCHBheS1lZGdlMFkw\nEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE9NnQiJuWCMDPMjflm6QnWTgUZ6UQq9Yr\nrRcMiieQ6wr8CDPDUjk3pT98livYiIpy71o0NnYqQiG8fKX0qkXkX6N8MHowDgYD\nVR0PAQH/BAQDAgeAMBMGA1UdJQQMMAoGCCsGAQUFBwMBMBMGA1UdEQQMMAqCCHBh\neS1lZGdlMB0GA1UdDgQWBBQd0huOccLjU0e4YwQj5e35CNAcXzAfBgNVHSMEGDAW\ngBRmrxq3nRD48S4PSFbbGMf19/cOLTAKBggqhkjOPQQDAgNpADBmAjEAooCci1IC\nyXLDfur2UPJqc1OYGXehwxr9fU0TILJIhFgId5uiYNRJPTXk6g3R5pAVAjEAhvKx\nQ7nd1yikWd52zFCkc7nS4oo8bd4h+Zy82oh9v+kZx8OHnDAi1ILj2oj9syPF\n-----END CERTIFICATE-----\n",
+                    "as_pem": "-----BEGIN CERTIFICATE-----\nMIICCTCCAY6gAwIBAgICEAMwCgYIKoZIzj0EAwIwTjEmMCQGA1UECgwdSGFybmVz\ncyBJbnRlcm1lZGlhdGUgQ0EgKEVDQykxJDAiBgNVBAMMG0hhcm5lc3MgSW50ZXJt\nZWRpYXRlIENBIEVDQzAeFw0yNjA5MjcwMDAwMDBaFw0yNjEyMjYwMDAwMDBaMC4x\nGTAXBgNVBAoMEEhhcm5lc3MgUGF5bWVudHMxETAPBgNVBAMMCHBheS1lZGdlMFkw\nEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE9NnQiJuWCMDPMjflm6QnWTgUZ6UQq9Yr\nrRcMiieQ6wr8CDPDUjk3pT98livYiIpy71o0NnYqQiG8fKX0qkXkX6N8MHowDgYD\nVR0PAQH/BAQDAgeAMBMGA1UdJQQMMAoGCCsGAQUFBwMBMBMGA1UdEQQMMAqCCHBh\neS1lZGdlMB0GA1UdDgQWBBQd0huOccLjU0e4YwQj5e35CNAcXzAfBgNVHSMEGDAW\ngBRmrxq3nRD48S4PSFbbGMf19/cOLTAKBggqhkjOPQQDAgNpADBmAjEA9HAcrFt+\nKFNTd6R3y2lvocHeCrWZr2gYKHOtosc17n3KI7UwmNY43iCA89KuT4FSAjEApfGa\nqbUAXJsinmhHX1cBTZ/z38Pnp3lUx97O9YMkriUPmIqwQLysHK7WFPaBwheB\n-----END CERTIFICATE-----\n",
                     "hpkp_pin": "Ezr8LVkGHsSoJvvGZN4HchvAhvXAWUbawlTnDTqTUgA=",
-                    "fingerprint_sha1": "tZn0pGQ2URGgDUwADBQT8vv7+Q4=",
-                    "fingerprint_sha256": "iVkYElu2euguoesYl7BR7PFJkCRUGTzSdymO708xIPM=",
+                    "fingerprint_sha1": "2ed3tZvTxv0HLbQRUtxf5TZnfwU=",
+                    "fingerprint_sha256": "SCSAXNDkHMtxGw2mDrgz/wR2lcRStBYBPYoIU8DMe7A=",
                     "serial_number": 4099,
-                    "not_valid_before": "2026-09-01T00:00:00Z",
-                    "not_valid_after": "2026-11-30T00:00:00Z",
+                    "not_valid_before": "2026-09-27T00:00:00Z",
+                    "not_valid_after": "2026-12-26T00:00:00Z",
                     "subject_alternative_name": {
                       "dns_names": [
                         "pay-edge"
@@ -112,13 +112,13 @@
                     }
                   },
                   {
-                    "as_pem": "-----BEGIN CERTIFICATE-----\nMIIDszCCAZugAwIBAgICEAIwDQYJKoZIhvcNAQEMBQAwNDEYMBYGA1UECgwPSGFy\nbmVzcyBSb290IENBMRgwFgYDVQQDDA9IYXJuZXNzIFJvb3QgQ0EwHhcNMjYwOTAx\nMDAwMDAwWhcNMzYwOTAxMDAwMDAwWjBOMSYwJAYDVQQKDB1IYXJuZXNzIEludGVy\nbWVkaWF0ZSBDQSAoRUNDKTEkMCIGA1UEAwwbSGFybmVzcyBJbnRlcm1lZGlhdGUg\nQ0EgRUNDMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAENSx6AnCv0+VNbH3I2sB3JT8z\ncoQVSQa1/Uwgjx8IgTK4tWk077AuMsfQXVAtcBie3s5uIQGWJcG1Kjn+6BF9O+iW\noSKDSwhtn/NZ/p9rHSkirvNm8YSrYmZU6dx1gvpLo2MwYTAPBgNVHRMBAf8EBTAD\nAQH/MA4GA1UdDwEB/wQEAwICBDAdBgNVHQ4EFgQUZq8at50Q+PEuD0hW2xjH9ff3\nDi0wHwYDVR0jBBgwFoAUaGJxmLQBzNw8S948cfeWrFEhYzMwDQYJKoZIhvcNAQEM\nBQADggIBABc/GcZRf7kLYH0k25YKxsl43ubL+1GXp3fWOF2B8+HchURRWN+Qu7Ab\nvTdJr9pGptjYR/enCULWXY3mCvVnpLhKW8vTOf+hVTwun8B134G9AjBJbq+JLlGa\nm0VAzXE8x66Bao9oXozfNUvDs6tK5AOGs6F9GDY0pEu0W+eKyzdT5NP8XO/C+Fy4\nshGyHxrBhP55tfq8RdAOsR8KsZcAYeUFlHe/kifX9ycJYECVSZ28guPFDgPwKukJ\n07JHpopoJzPKCjeXCLAqEMjNtsLnRfcSEH0gWq0yUNvS+rg4h9/cL04WOnXK2PG+\nJsKNimx5XrzkQL5i8m4W/A2Si0T04TiedfiXkMnHmPHQ2NO1rBsyAzKBh3MpJkzE\nDiDgHz5RaeXD/3vnf7DwuAUxGpSAKduNSCAqceIX3fYrgesh1Ip67hQ9K9kEKHxA\n+w7nIkora0oQCLYxcs56Q7L2hLUqj3PzDqpN0+gDbdstMy42BU4CgeLBwWZF+I5L\nMvHVALJHq9Dfi3mkKsla3jZbE46RwlKIqoBztU/zdcAhL16ABvs66KAqmLhIMFmg\nbRuQ9CzDyAJtb3PSMiKW9FQA31U2fMRVcl2G4exVLXQ5TaqqYMhyum6kAzmn0BYY\nP6RSoIn+pA96JxFXCXetPkFdtWXpaYAg0dKHY/ZlC+5cyhmuDIpc\n-----END CERTIFICATE-----\n",
+                    "as_pem": "-----BEGIN CERTIFICATE-----\nMIIDszCCAZugAwIBAgICEAIwDQYJKoZIhvcNAQEMBQAwNDEYMBYGA1UECgwPSGFy\nbmVzcyBSb290IENBMRgwFgYDVQQDDA9IYXJuZXNzIFJvb3QgQ0EwHhcNMjYwOTI3\nMDAwMDAwWhcNMzYwOTI3MDAwMDAwWjBOMSYwJAYDVQQKDB1IYXJuZXNzIEludGVy\nbWVkaWF0ZSBDQSAoRUNDKTEkMCIGA1UEAwwbSGFybmVzcyBJbnRlcm1lZGlhdGUg\nQ0EgRUNDMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAENSx6AnCv0+VNbH3I2sB3JT8z\ncoQVSQa1/Uwgjx8IgTK4tWk077AuMsfQXVAtcBie3s5uIQGWJcG1Kjn+6BF9O+iW\noSKDSwhtn/NZ/p9rHSkirvNm8YSrYmZU6dx1gvpLo2MwYTAPBgNVHRMBAf8EBTAD\nAQH/MA4GA1UdDwEB/wQEAwICBDAdBgNVHQ4EFgQUZq8at50Q+PEuD0hW2xjH9ff3\nDi0wHwYDVR0jBBgwFoAUaGJxmLQBzNw8S948cfeWrFEhYzMwDQYJKoZIhvcNAQEM\nBQADggIBAKaA2fgpwox87RxBgk2xByHjYuZdCnVc2/gExdYy4HbtbPUKMTSRzIqp\nqfS5RHxU5TyxevZXy+fq4iABej/T7yg2P7vX93qgN1kmGoWqAOZorLOcEA6A09JI\n4JYwq12MxHC31m1mZk0Ie45XwpPLhbHpzE5snM1udOJ2Zp+NP+QtQ0xMSKcB6seL\nm14/aznLmkbBXqImk+JBfmcrbqKbJTn9f5JKlrwTfkhHSQ3Vyrth5BKPIDGEIjFo\nixA96MAxU9a9RB2w5MbvXXpJ/7QefidBr6uqoLaTJxdrK+Bdij9orwCEA6KVHGPR\nc+/V070sve9hd/yoZkw7BnEIoSb627TSO7dykLUHaa8Z6tYc9Sb5hFHcOrKcOLkw\nA8rGj9wDrK3W1vbny+0RzvAtd7x25/0WZI7DbUGtOKhE4jZt6E2l8VstAdmNV/5I\nCCdJfdNyjoTcSOuEOrrVyvyQYc1CN8X33dFz3YKe+e5cRvi5fvWAU0i7nk1GEb1R\nJcZyVOGH9bmnYLXBnl5IAmSAIF+hUdNROVvfTqrLd43A+0Hsmwhx6f1+BX5cfDkW\nXtDLyo5MY1IqOOuqmPeBfinJLU476ltEDkzP6qCgfbOAycptYRzMbpq/PUlBhVIt\nCtwhq74jFsoyrFzs9oCPscdW8vNt2iIHQCSniZadODv6gYGjWUEv\n-----END CERTIFICATE-----\n",
                     "hpkp_pin": "qbNNt5Q87Cx3LeQ4oNtk0/o59MxwMuV+wuT2eT3PJYM=",
-                    "fingerprint_sha1": "Ecrz+WzMRco8ShC+WkZW4Su3Rgo=",
-                    "fingerprint_sha256": "RZ61cvY5cmz6LO2aNX1PRkwEzRlSphPlwN5FJsWhXYc=",
+                    "fingerprint_sha1": "e06Z/CG63Uvob/sprtIa5NBFntc=",
+                    "fingerprint_sha256": "6yNusiS3mBYbh1kAgXjJa2KsiR2QLaVY0IeOPj1eHlY=",
                     "serial_number": 4098,
-                    "not_valid_before": "2026-09-01T00:00:00Z",
-                    "not_valid_after": "2036-09-01T00:00:00Z",
+                    "not_valid_before": "2026-09-27T00:00:00Z",
+                    "not_valid_after": "2036-09-27T00:00:00Z",
                     "subject_alternative_name": {
                       "dns_names": [],
                       "ip_addresses": []
@@ -437,13 +437,13 @@
             "certificate_deployment_with_sni_disabled": {
               "received_certificate_chain": [
                 {
-                  "as_pem": "-----BEGIN CERTIFICATE-----\nMIICCTCCAY6gAwIBAgICEAMwCgYIKoZIzj0EAwIwTjEmMCQGA1UECgwdSGFybmVz\ncyBJbnRlcm1lZGlhdGUgQ0EgKEVDQykxJDAiBgNVBAMMG0hhcm5lc3MgSW50ZXJt\nZWRpYXRlIENBIEVDQzAeFw0yNjA5MDEwMDAwMDBaFw0yNjExMzAwMDAwMDBaMC4x\nGTAXBgNVBAoMEEhhcm5lc3MgUGF5bWVudHMxETAPBgNVBAMMCHBheS1lZGdlMFkw\nEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE9NnQiJuWCMDPMjflm6QnWTgUZ6UQq9Yr\nrRcMiieQ6wr8CDPDUjk3pT98livYiIpy71o0NnYqQiG8fKX0qkXkX6N8MHowDgYD\nVR0PAQH/BAQDAgeAMBMGA1UdJQQMMAoGCCsGAQUFBwMBMBMGA1UdEQQMMAqCCHBh\neS1lZGdlMB0GA1UdDgQWBBQd0huOccLjU0e4YwQj5e35CNAcXzAfBgNVHSMEGDAW\ngBRmrxq3nRD48S4PSFbbGMf19/cOLTAKBggqhkjOPQQDAgNpADBmAjEAooCci1IC\nyXLDfur2UPJqc1OYGXehwxr9fU0TILJIhFgId5uiYNRJPTXk6g3R5pAVAjEAhvKx\nQ7nd1yikWd52zFCkc7nS4oo8bd4h+Zy82oh9v+kZx8OHnDAi1ILj2oj9syPF\n-----END CERTIFICATE-----\n",
+                  "as_pem": "-----BEGIN CERTIFICATE-----\nMIICCTCCAY6gAwIBAgICEAMwCgYIKoZIzj0EAwIwTjEmMCQGA1UECgwdSGFybmVz\ncyBJbnRlcm1lZGlhdGUgQ0EgKEVDQykxJDAiBgNVBAMMG0hhcm5lc3MgSW50ZXJt\nZWRpYXRlIENBIEVDQzAeFw0yNjA5MjcwMDAwMDBaFw0yNjEyMjYwMDAwMDBaMC4x\nGTAXBgNVBAoMEEhhcm5lc3MgUGF5bWVudHMxETAPBgNVBAMMCHBheS1lZGdlMFkw\nEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE9NnQiJuWCMDPMjflm6QnWTgUZ6UQq9Yr\nrRcMiieQ6wr8CDPDUjk3pT98livYiIpy71o0NnYqQiG8fKX0qkXkX6N8MHowDgYD\nVR0PAQH/BAQDAgeAMBMGA1UdJQQMMAoGCCsGAQUFBwMBMBMGA1UdEQQMMAqCCHBh\neS1lZGdlMB0GA1UdDgQWBBQd0huOccLjU0e4YwQj5e35CNAcXzAfBgNVHSMEGDAW\ngBRmrxq3nRD48S4PSFbbGMf19/cOLTAKBggqhkjOPQQDAgNpADBmAjEA9HAcrFt+\nKFNTd6R3y2lvocHeCrWZr2gYKHOtosc17n3KI7UwmNY43iCA89KuT4FSAjEApfGa\nqbUAXJsinmhHX1cBTZ/z38Pnp3lUx97O9YMkriUPmIqwQLysHK7WFPaBwheB\n-----END CERTIFICATE-----\n",
                   "hpkp_pin": "Ezr8LVkGHsSoJvvGZN4HchvAhvXAWUbawlTnDTqTUgA=",
-                  "fingerprint_sha1": "tZn0pGQ2URGgDUwADBQT8vv7+Q4=",
-                  "fingerprint_sha256": "iVkYElu2euguoesYl7BR7PFJkCRUGTzSdymO708xIPM=",
+                  "fingerprint_sha1": "2ed3tZvTxv0HLbQRUtxf5TZnfwU=",
+                  "fingerprint_sha256": "SCSAXNDkHMtxGw2mDrgz/wR2lcRStBYBPYoIU8DMe7A=",
                   "serial_number": 4099,
-                  "not_valid_before": "2026-09-01T00:00:00Z",
-                  "not_valid_after": "2026-11-30T00:00:00Z",
+                  "not_valid_before": "2026-09-27T00:00:00Z",
+                  "not_valid_after": "2026-12-26T00:00:00Z",
                   "subject_alternative_name": {
                     "dns_names": [
                       "pay-edge"
@@ -511,13 +511,13 @@
                   }
                 },
                 {
-                  "as_pem": "-----BEGIN CERTIFICATE-----\nMIIDszCCAZugAwIBAgICEAIwDQYJKoZIhvcNAQEMBQAwNDEYMBYGA1UECgwPSGFy\nbmVzcyBSb290IENBMRgwFgYDVQQDDA9IYXJuZXNzIFJvb3QgQ0EwHhcNMjYwOTAx\nMDAwMDAwWhcNMzYwOTAxMDAwMDAwWjBOMSYwJAYDVQQKDB1IYXJuZXNzIEludGVy\nbWVkaWF0ZSBDQSAoRUNDKTEkMCIGA1UEAwwbSGFybmVzcyBJbnRlcm1lZGlhdGUg\nQ0EgRUNDMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAENSx6AnCv0+VNbH3I2sB3JT8z\ncoQVSQa1/Uwgjx8IgTK4tWk077AuMsfQXVAtcBie3s5uIQGWJcG1Kjn+6BF9O+iW\noSKDSwhtn/NZ/p9rHSkirvNm8YSrYmZU6dx1gvpLo2MwYTAPBgNVHRMBAf8EBTAD\nAQH/MA4GA1UdDwEB/wQEAwICBDAdBgNVHQ4EFgQUZq8at50Q+PEuD0hW2xjH9ff3\nDi0wHwYDVR0jBBgwFoAUaGJxmLQBzNw8S948cfeWrFEhYzMwDQYJKoZIhvcNAQEM\nBQADggIBABc/GcZRf7kLYH0k25YKxsl43ubL+1GXp3fWOF2B8+HchURRWN+Qu7Ab\nvTdJr9pGptjYR/enCULWXY3mCvVnpLhKW8vTOf+hVTwun8B134G9AjBJbq+JLlGa\nm0VAzXE8x66Bao9oXozfNUvDs6tK5AOGs6F9GDY0pEu0W+eKyzdT5NP8XO/C+Fy4\nshGyHxrBhP55tfq8RdAOsR8KsZcAYeUFlHe/kifX9ycJYECVSZ28guPFDgPwKukJ\n07JHpopoJzPKCjeXCLAqEMjNtsLnRfcSEH0gWq0yUNvS+rg4h9/cL04WOnXK2PG+\nJsKNimx5XrzkQL5i8m4W/A2Si0T04TiedfiXkMnHmPHQ2NO1rBsyAzKBh3MpJkzE\nDiDgHz5RaeXD/3vnf7DwuAUxGpSAKduNSCAqceIX3fYrgesh1Ip67hQ9K9kEKHxA\n+w7nIkora0oQCLYxcs56Q7L2hLUqj3PzDqpN0+gDbdstMy42BU4CgeLBwWZF+I5L\nMvHVALJHq9Dfi3mkKsla3jZbE46RwlKIqoBztU/zdcAhL16ABvs66KAqmLhIMFmg\nbRuQ9CzDyAJtb3PSMiKW9FQA31U2fMRVcl2G4exVLXQ5TaqqYMhyum6kAzmn0BYY\nP6RSoIn+pA96JxFXCXetPkFdtWXpaYAg0dKHY/ZlC+5cyhmuDIpc\n-----END CERTIFICATE-----\n",
+                  "as_pem": "-----BEGIN CERTIFICATE-----\nMIIDszCCAZugAwIBAgICEAIwDQYJKoZIhvcNAQEMBQAwNDEYMBYGA1UECgwPSGFy\nbmVzcyBSb290IENBMRgwFgYDVQQDDA9IYXJuZXNzIFJvb3QgQ0EwHhcNMjYwOTI3\nMDAwMDAwWhcNMzYwOTI3MDAwMDAwWjBOMSYwJAYDVQQKDB1IYXJuZXNzIEludGVy\nbWVkaWF0ZSBDQSAoRUNDKTEkMCIGA1UEAwwbSGFybmVzcyBJbnRlcm1lZGlhdGUg\nQ0EgRUNDMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAENSx6AnCv0+VNbH3I2sB3JT8z\ncoQVSQa1/Uwgjx8IgTK4tWk077AuMsfQXVAtcBie3s5uIQGWJcG1Kjn+6BF9O+iW\noSKDSwhtn/NZ/p9rHSkirvNm8YSrYmZU6dx1gvpLo2MwYTAPBgNVHRMBAf8EBTAD\nAQH/MA4GA1UdDwEB/wQEAwICBDAdBgNVHQ4EFgQUZq8at50Q+PEuD0hW2xjH9ff3\nDi0wHwYDVR0jBBgwFoAUaGJxmLQBzNw8S948cfeWrFEhYzMwDQYJKoZIhvcNAQEM\nBQADggIBAKaA2fgpwox87RxBgk2xByHjYuZdCnVc2/gExdYy4HbtbPUKMTSRzIqp\nqfS5RHxU5TyxevZXy+fq4iABej/T7yg2P7vX93qgN1kmGoWqAOZorLOcEA6A09JI\n4JYwq12MxHC31m1mZk0Ie45XwpPLhbHpzE5snM1udOJ2Zp+NP+QtQ0xMSKcB6seL\nm14/aznLmkbBXqImk+JBfmcrbqKbJTn9f5JKlrwTfkhHSQ3Vyrth5BKPIDGEIjFo\nixA96MAxU9a9RB2w5MbvXXpJ/7QefidBr6uqoLaTJxdrK+Bdij9orwCEA6KVHGPR\nc+/V070sve9hd/yoZkw7BnEIoSb627TSO7dykLUHaa8Z6tYc9Sb5hFHcOrKcOLkw\nA8rGj9wDrK3W1vbny+0RzvAtd7x25/0WZI7DbUGtOKhE4jZt6E2l8VstAdmNV/5I\nCCdJfdNyjoTcSOuEOrrVyvyQYc1CN8X33dFz3YKe+e5cRvi5fvWAU0i7nk1GEb1R\nJcZyVOGH9bmnYLXBnl5IAmSAIF+hUdNROVvfTqrLd43A+0Hsmwhx6f1+BX5cfDkW\nXtDLyo5MY1IqOOuqmPeBfinJLU476ltEDkzP6qCgfbOAycptYRzMbpq/PUlBhVIt\nCtwhq74jFsoyrFzs9oCPscdW8vNt2iIHQCSniZadODv6gYGjWUEv\n-----END CERTIFICATE-----\n",
                   "hpkp_pin": "qbNNt5Q87Cx3LeQ4oNtk0/o59MxwMuV+wuT2eT3PJYM=",
-                  "fingerprint_sha1": "Ecrz+WzMRco8ShC+WkZW4Su3Rgo=",
-                  "fingerprint_sha256": "RZ61cvY5cmz6LO2aNX1PRkwEzRlSphPlwN5FJsWhXYc=",
+                  "fingerprint_sha1": "e06Z/CG63Uvob/sprtIa5NBFntc=",
+                  "fingerprint_sha256": "6yNusiS3mBYbh1kAgXjJa2KsiR2QLaVY0IeOPj1eHlY=",
                   "serial_number": 4098,
-                  "not_valid_before": "2026-09-01T00:00:00Z",
-                  "not_valid_after": "2036-09-01T00:00:00Z",
+                  "not_valid_before": "2026-09-27T00:00:00Z",
+                  "not_valid_after": "2036-09-27T00:00:00Z",
                   "subject_alternative_name": {
                     "dns_names": [],
                     "ip_addresses": []
@@ -3123,10 +3123,10 @@
                 "ephemeral_key": {
                   "type_name": "ECDH",
                   "size": 256,
-                  "public_bytes": "BFElxyICSu1N6idrlMWoGivQAPA6zSmIYLYeloWWKdU5p4Xud62k9oKE74NsYkaW2Dtkh6tdNC8Z0Gaiq7eMZMI=",
+                  "public_bytes": "BOoUvTgdk2sO+lTDnkWSJiL7uVI6wVhKjsdYA959ZYoBgYnKca4UA8hPEdOVljC2KADH5oLu/186LFjXjmvLwAQ=",
                   "curve_name": "secp256r1",
-                  "x": "USXHIgJK7U3qJ2uUxagaK9AA8DrNKYhgth6WhZYp1Tk=",
-                  "y": "p4Xud62k9oKE74NsYkaW2Dtkh6tdNC8Z0Gaiq7eMZMI=",
+                  "x": "6hS9OB2Taw76VMOeRZImIvu5UjrBWEqOx1gD3n1ligE=",
+                  "y": "gYnKca4UA8hPEdOVljC2KADH5oLu/186LFjXjmvLwAQ=",
                   "prime": null,
                   "generator": null
                 }
@@ -4515,7 +4515,7 @@
                   "name": "TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA",
                   "is_anonymous": false,
                   "key_size": 168,
-                  "openssl_name": "EDH-DSS-DES-CBC3-SHA"
+                  "openssl_name": "DHE-DSS-DES-CBC3-SHA"
                 },
                 "error_message": "TLS alert: handshake failure"
               },
@@ -4549,7 +4549,7 @@
                 "ephemeral_key": {
                   "type_name": "ECDH",
                   "size": 253,
-                  "public_bytes": "QJz36hmyeOE7Okc0EI/NhI1vJfPSaiRpdADu1v4u7mY=",
+                  "public_bytes": "6t7rPLZnxYnYmXR3Wl9PDPNqpJHZUCiLcHmgKV0fpgc=",
                   "curve_name": "X25519",
                   "x": null,
                   "y": null,
@@ -4567,7 +4567,7 @@
                 "ephemeral_key": {
                   "type_name": "ECDH",
                   "size": 253,
-                  "public_bytes": "iiJKtH418H46XPuZCS0Qcq74TXyUwPkAWRP6OfeoECs=",
+                  "public_bytes": "mkr7dzuoYUN2LjijZWCGOqD9U0R0+Srx8KEv+YlP8Qg=",
                   "curve_name": "X25519",
                   "x": null,
                   "y": null,
@@ -4585,7 +4585,7 @@
                 "ephemeral_key": {
                   "type_name": "ECDH",
                   "size": 253,
-                  "public_bytes": "M+nXkYhQN+IYgd+83V6eL841iDpcaqKS9+oteFmbZ1M=",
+                  "public_bytes": "YMyXTMpR22LS9Pfjm1gkBZSpW/P1yQQwbnfJMAPjIgY=",
                   "curve_name": "X25519",
                   "x": null,
                   "y": null,
@@ -4841,8 +4841,8 @@
       }
     }
   ],
-  "date_scans_started": "2026-09-26T11:09:48.820633Z",
-  "date_scans_completed": "2026-09-26T11:09:50.463748Z",
+  "date_scans_started": "2026-09-27T13:52:04.260114Z",
+  "date_scans_completed": "2026-09-27T13:52:05.971311Z",
   "sslyze_version": "6.2.0",
   "sslyze_url": "https://github.com/nabla-c0d3/sslyze"
 }

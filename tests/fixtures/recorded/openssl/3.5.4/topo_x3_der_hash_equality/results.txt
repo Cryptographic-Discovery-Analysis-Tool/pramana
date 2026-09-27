@@ -1,11 +1,11 @@
 $ openssl x509 -in pay-edge.pem.crt -outform DER | sha256sum
-895918125bb67ae82ea1eb1897b051ecf149902454193cd277298eef4f3120f3 *-
+4824805cd0e41ccb711b0da60eb833ff047695c452b416013d8a0853c0cc7bb0 *-
 $ sha256sum pay-edge.der.crt
-895918125bb67ae82ea1eb1897b051ecf149902454193cd277298eef4f3120f3 *pay-edge.der.crt
+4824805cd0e41ccb711b0da60eb833ff047695c452b416013d8a0853c0cc7bb0 *pay-edge.der.crt
 
 $ openssl pkcs12 -in gateway.p12 -clcerts -nokeys -passin pass:changeit -out gateway-from-p12.pem.crt
 $ sha256sum gateway-from-p12.pem.crt
-ffcb45d6f8c7fe9c665bdd88b3ea1e59685cd4ba9d35f4ee597c6d5867dfb2be *gateway-from-p12.pem.crt
+168fcb7c5b710c145196c16896b2a26ee6c14b84265d1fc679b890fb09c4b3fa *gateway-from-p12.pem.crt
    -- NOTE: this raw PEM-text hash does NOT match the original cert.pem's PEM
       hash, because openssl pkcs12 -clcerts prepends "Bag Attributes"/
       "subject="/"issuer=" comment lines before the PEM block. This is the
@@ -15,15 +15,15 @@ ffcb45d6f8c7fe9c665bdd88b3ea1e59685cd4ba9d35f4ee597c6d5867dfb2be *gateway-from-p
 $ diff <(openssl x509 -in ../../../../../../../ecdat-harness/harness/build/out/gateway-p12/cert.pem) gateway-from-p12.pem.crt
 0a1,5
 > Bag Attributes
->     localKeyID: 89 85 2D 39 18 EE DE B5 2B A0 30 82 4C 04 76 91 55 E0 D5 20
+>     localKeyID: 92 DF E5 0B 01 8B F9 16 DD 59 9B E5 BF 1D 2C D2 01 07 99 A0
 >     friendlyName: payment-gateway
 > subject=O=Harness Payments, CN=payment-gateway
 > issuer=O=Harness Intermediate CA (ECC), CN=Harness Intermediate CA ECC
 
 $ sha256sum gateway-from-p12.der.crt
-cd041fb69a72d749e59c6dac5b62dd709a420c3d93e558610a59e6e253750515 *gateway-from-p12.der.crt
+5c0d8ae228946bc594137bc89ff38f46401b614344cf9a40a7c4633828671cae *gateway-from-p12.der.crt
 $ openssl x509 -in <original cert.pem> -outform DER | sha256sum
-cd041fb69a72d749e59c6dac5b62dd709a420c3d93e558610a59e6e253750515 *-
+5c0d8ae228946bc594137bc89ff38f46401b614344cf9a40a7c4633828671cae *-
 
 CONCLUSION: once every encoding is canonicalized to DER via `openssl x509
 -outform DER` (running the PKCS12-extracted cert back through the x509
@@ -34,3 +34,9 @@ keystore. It is NOT identical if you hash the raw text openssl pkcs12
 emits directly, because that text is not canonical PEM (comment lines are
 part of the file). This supports Lock sec.15.2 T6's "canonicalised first"
 qualifier -- canonicalization is not a formality, it's load-bearing.
+
+-- Re-recorded 2026-09-27 (ecdat-harness PKI bump; NOT_BEFORE moved to
+2026-09-27, see ecdat-harness/README.md "Deterministic PKI" -> "Bumping the
+PKI" and docs/open-issues.md OI-019). Same commands, same harness role
+identities, new cert bytes/hashes because generate-pki.sh's fixed dates
+changed. Run against openssl 3.5.4 (Git Bash /mingw64/bin/openssl).
