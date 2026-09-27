@@ -638,3 +638,75 @@ ambiguity in the Lock/harness/Final-Architecture sense ADR-001 through ADR-005 e
 straightforward additive data-plus-overlay feature in the same shape P22's policy overlay already
 established, so a DEV-NNN entry was judged the correct record per CLAUDE.md's own distinction
 between the two mechanisms.
+
+## DEV-017 — supplier/vendor CBOM intake: new scope beyond build-plan.md's numbered phases (2026-09-27)
+
+**Issue.** Same posture as DEV-016: build-plan.md's phases stop at P26, and none reserves
+"ingest a third party's CycloneDX CBOM as supplier evidence". This task -- SIH26164's
+regulated-org ask, since India's DST roadmap makes vendor CBOM submission mandatory from
+FY2027-28 and RBI's Q-SAFE committee evaluates banks via CBOMs -- is additive scope: a new
+`src/ecdat/supplier/` package built entirely on existing, unchanged modules
+(`export/cyclonedx.py`'s schema validator, `export/signing.py`'s JSF verifier,
+`data/crypto_families.yaml`'s cited shor-broken registry, `risk/sector.py`'s sector-obligation
+mapping). Recorded here per CLAUDE.md's "any departure from build-plan.md ... gets a DEV-NNN
+entry".
+
+**What was added.**
+- `src/ecdat/supplier/models.py` -- `SupplierProvenance`, `SupplierComponent` (always
+  `state=DECLARED`, enforced by a validator), `ComponentCorrelation`, `SupplierCoverageReport`.
+- `src/ecdat/supplier/intake.py::import_supplier_cbom()` -- validates against the bundled
+  CycloneDX 1.6 schema (`export/cyclonedx.py::validate()`, unchanged), verifies a JSF signature
+  when present (`export/signing.py::verify_bom()`, unchanged), and parses `cryptoProperties`
+  fields quoted verbatim from `schemas/cyclonedx-1.6.schema.json`
+  (`algorithmProperties.primitive/parameterSetIdentifier/curve`,
+  `certificateProperties.subjectName/issuerName/certificateFormat`,
+  `relatedCryptoMaterialProperties.type/size`, `protocolProperties.type/version`, and
+  `hashes[].content` tagged `der_sha256`/`spki_sha256` only when the component's own
+  `assetType`/`relatedCryptoMaterialProperties.type` already says what the hash covers -- never
+  guessed). `specVersion` 1.7 is reported `UnsupportedSpecVersionError` rather than validated
+  against the wrong (1.6) schema: no 1.7 schema is vendored in `schemas/`.
+- `src/ecdat/supplier/correlate.py::correlate_supplier()` -- joins a supplier's DECLARED
+  components to our own KNOWN `CryptoAsset`s *only* by `der_sha256`/`spki_sha256` match, the
+  same two fields CLAUDE.md names as the sole legitimate cross-surface identity signal and
+  `correlation/engine.py` already restricts itself to. A matched pair with agreeing declared vs.
+  observed algorithm fields is `CORROBORATED`; disagreeing is `CONFLICTING`, with both sides'
+  evidence_refs kept (the task's own worked example: supplier declares ML-KEM, we observed only
+  X25519). No match on either side is `DECLARED_ONLY`/`OBSERVED_ONLY`.
+- `src/ecdat/supplier/report.py::coverage_report()` -- per-supplier counts, quantum-vulnerable
+  declared components (via `data.crypto_families.is_shor_broken`, catching `NoCitedFamilyError`
+  and skipping rather than guessing), and an optional sector's cited obligation policy keys
+  (`risk/sector.py::sector_profile()`, unchanged -- no second traffic-light calculation).
+- `ecdat cbom-import` (CLI), `POST /api/suppliers/import` (API), and a new "Suppliers" tab
+  (`ui/dashboard/src/Suppliers.jsx`), all presentation/orchestration over the three modules
+  above -- no epistemic state, hash comparison, or quantum-vulnerability judgement is made in
+  the CLI, API, or dashboard layers.
+
+**Why no new `rule_id` was registered.** `ComponentCorrelation.status` uses `CoverageStatus`
+(a plain closed enum on this module's own report record) to represent CORROBORATED/CONFLICTING,
+never `model.field_value.derive()` or `model.relationship.Relationship`. Neither the R-DERIVE
+`rule_id` requirement nor the Relationship contract's rule_id-for-CONFLICTING requirement
+applies, because a `ComponentCorrelation` is a plain comparison record between two provenances
+(supplier CBOM vs. our own scan), not a derived field on one asset and not a graph edge between
+two of our own entities. This mirrors `merge.py::_merge_field`'s own CONFLICTING construction
+(no `rule_id`, a `Resolution(status=UNRESOLVED, reason=...)`-shaped explanation instead) and
+`agility/evidence.py`'s DEV-012 precedent for exactly this situation: "none of the three fields
+is named in the canonical architecture docs, so no `rule_id` exists to register and cite."
+Inventing a rule_id here (e.g. "SUPPLIER-CONFLICT-001") from memory, with no Lock/harness/
+Pramana_Ledger_Spec.md section naming it, would violate CLAUDE.md's own anti-hallucination
+rule ("register only rule_ids a spec names").
+
+**Why `EXPORTER` (not a new role) guards `POST /api/suppliers/import`.** `security/auth.py`
+defines exactly two roles, VIEWER and EXPORTER, with EXPORTER implying VIEWER and no role able
+to write without also being able to export. Adding a third role (e.g. `IMPORTER`) was judged out
+of scope for this task -- it would touch `security/auth.py`'s `_IMPLIES` table and every existing
+test that enumerates the two roles, for a distinction (import vs. export) the P17 access-control
+design was never asked to make. `EXPORTER` was chosen as the closer of the two existing roles to
+"may submit data", and this choice is recorded here rather than left implicit.
+
+**Not attempted.** No persistence layer for supplier imports (no `SupplierStore`, analogous to
+`store/repository.py`'s `RunStore`): each `cbom-import`/`/api/suppliers/import` call is
+stateless, computed fresh from the CBOM handed to it and (optionally) a scan plan run in the same
+call, exactly like `ecdat correlate` itself holds no run history. A caller that wants a supplier's
+report saved passes `--out` (CLI) or persists the JSON response itself; a real append-only
+per-supplier run history is the natural next step behind the same `RunStore`-shaped interface,
+not invented here without a concrete second consumer.

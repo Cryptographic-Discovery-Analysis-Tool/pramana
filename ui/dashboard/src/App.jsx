@@ -7,6 +7,7 @@ import Recommend from './Recommend.jsx'
 import EvidenceCard from './EvidenceCard.jsx'
 import Graph from './Graph.jsx'
 import Sector from './Sector.jsx'
+import Suppliers from './Suppliers.jsx'
 import { apiFetch } from './api.js'
 
 // Presentation only. Every band, window and deadline shown here is computed by
@@ -21,6 +22,7 @@ const TABS = [
   ['recommend', 'Move to'],
   ['coverage', 'Coverage'],
   ['graph', 'Evidence graph'],
+  ['suppliers', 'Suppliers'],
 ]
 
 export default function App() {
@@ -246,6 +248,7 @@ export default function App() {
         {tab === 'recommend' && recommendations && <Recommend data={recommendations} />}
         {tab === 'coverage' && data.coverage && <Coverage data={data.coverage} />}
         {tab === 'graph' && graph && <Graph data={graph} />}
+        {tab === 'suppliers' && <Suppliers sectors={sectors} />}
       </main>
 
       {selected && <EvidenceCard record={selected} onClose={() => setSelected(null)} />}

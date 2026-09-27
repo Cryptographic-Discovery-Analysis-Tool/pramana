@@ -212,6 +212,15 @@ tbody tr:hover td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
 .band-sector-on_track { color: var(--accent); }
 .band-sector-no_deadline { color: var(--dim); }
 
+/* Supplier CBOM intake (SIH26164): correlation outcome between a supplier's
+   DECLARED component and our own KNOWN scan inventory, joined only by a
+   content-identity hash match -- a third axis again, never a re-derivation
+   of the ledger band or the sector traffic light above. */
+.band-supplier-CORROBORATED { color: var(--accent); }
+.band-supplier-CONFLICTING { color: var(--alert); }
+.band-supplier-DECLARED_ONLY { color: var(--warn); }
+.band-supplier-OBSERVED_ONLY { color: var(--dim); }
+
 .graph-edge {
   padding: 8px 0;
   border-bottom: 1px solid var(--line);

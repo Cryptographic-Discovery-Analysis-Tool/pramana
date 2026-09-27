@@ -73,6 +73,60 @@ optional `include_global`/`at_risk_days`) returns the per-asset traffic light.
 Dashboard: the "Sector view" tab has a sector picker and an "also show
 global (non-India) deadlines" toggle.
 
+## Supplier/vendor CBOM intake
+
+India's DST "Roadmap to Quantum Resiliency" makes vendor CBOM submission
+mandatory from FY2027-28 (`docs/sources/India_DST_Quantum_Safe_Roadmap_2026.md`),
+and RBI's Q-SAFE committee evaluates banks via CBOMs
+(`docs/sources/IN_RBI_QSAFE_Committee_2026.md`). Pramāṇa can ingest a
+supplier's CycloneDX CBOM as evidence about a *third party's* inventory:
+
+1. **Validate.** The bundled CycloneDX 1.6 schema (`export/cyclonedx.py`).
+   1.7 is honestly reported as unsupported rather than validated against the
+   wrong schema (no 1.7 schema is vendored); malformed JSON is rejected with
+   a clear error.
+2. **Verify.** If the CBOM carries a JSF `signature`, it is checked with the
+   existing `export/signing.py` module: `VERIFIED`, `UNVERIFIED` (no
+   signature present), or `INVALID`. An invalid or missing signature is
+   never treated as verified.
+3. **Record provenance.** Supplier name, the file's own SHA-256, import
+   time, signature status, and the CBOM's `serialNumber`/`version`.
+4. **Epistemics.** Every declared component is `DECLARED`, never `KNOWN` --
+   a supplier's claim about their own product is not something we observed
+   ourselves (R-MONOTONE).
+5. **Correlate.** Declared components are joined to our own scan inventory
+   *only* by content-identity hash (`der_sha256` / `spki_sha256` -- the same
+   two fields `correlation/engine.py` already treats as the sole legitimate
+   cross-surface identity signal). A hash match with agreeing algorithm
+   fields is `CORROBORATED`; a hash match with disagreeing fields (e.g. the
+   supplier declares ML-KEM, we observed only X25519) is `CONFLICTING`, with
+   both evidences kept. No hash match on either side is `DECLARED_ONLY` /
+   `OBSERVED_ONLY` -- an honest coverage gap, never silently dropped.
+6. **Report.** Per-supplier counts, which declared components are cited
+   quantum-vulnerable (`data/crypto_families.yaml`), and, for an optional
+   sector, which of that sector's cited obligations
+   (`data/sector_profiles.yaml`) apply.
+
+CLI:
+
+```bash
+python -m ecdat.cli cbom-import \
+  --supplier "Acme Vendor" --file vendor.cdx.json \
+  --plan tests/fixtures/correlation/demo_plan.json --sector bfsi --json
+```
+
+(`--plan` is optional; omit it to see the supplier's declared components on
+their own, with everything `DECLARED_ONLY`.)
+
+API: `POST /api/suppliers/import` (EXPORTER role) with a JSON body
+`{"supplier": "...", "cbom_json": "<the CBOM file's exact text>", "sector": "bfsi"}`
+returns the same provenance/coverage document.
+
+Dashboard: the "Suppliers" tab uploads a CBOM file, shows its provenance and
+signature status, and lists every correlation outcome (corroborated,
+conflicting, declared-only, observed-only) with the declared vs. observed
+value behind each one.
+
 ## Why "Pramāṇa"
 
 Sanskrit: *the means by which one arrives at valid knowledge.*
