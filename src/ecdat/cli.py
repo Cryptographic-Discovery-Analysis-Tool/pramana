@@ -123,6 +123,7 @@ from ecdat.supplier.intake import (
     import_supplier_cbom,
 )
 from ecdat.supplier.report import coverage_report
+from ecdat.quickscan import run_quickscan
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 #: Every adapter that exists, keyed by its own declared `adapter_id`. Not
@@ -1191,6 +1192,34 @@ def _verify_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def _quickscan(args: argparse.Namespace) -> int:
+    """Thin CLI wrapper -- all discovery/orchestration logic lives in
+    `ecdat.quickscan`; see its module docstring for why (DEV-018)."""
+    try:
+        result = run_quickscan(
+            args.path,
+            sector=args.sector,
+            out_dir=args.out,
+            live_tls=tuple(args.live_tls or ()),
+            rollout_y_days=args.rollout_y_days,
+            scenario_id=args.scenario,
+            context=args.context,
+            capture=args.capture,
+            accept_inferred=args.accept_inferred,
+        )
+    except NotADirectoryError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"--context {args.context!r}: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result.to_json_document(), indent=2))
+    else:
+        print(result.summary_text())
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="ecdat", description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -1503,6 +1532,69 @@ def main(argv: list[str] | None = None) -> int:
     )
     assemble_parser.add_argument("--out", required=True, help="write the subjects file here")
     assemble_parser.set_defaults(func=_assemble)
+
+    quickscan_parser = subparsers.add_parser(
+        "quickscan",
+        help="one command over a folder: auto-discover applicable adapters, then scan -> "
+        "correlate -> recommendations -> (ledger/risk + sector view + CBOM export, if "
+        "--rollout-y-days is given) -- the demo path (DEV-018)",
+    )
+    quickscan_parser.add_argument("path", help="folder to scan")
+    quickscan_parser.add_argument(
+        "--sector", choices=sorted(available_sectors()), default=None, help="sector traffic-light view"
+    )
+    quickscan_parser.add_argument(
+        "--out", default=None, help="output directory; default ./pramana-out/<timestamp>"
+    )
+    quickscan_parser.add_argument(
+        "--live-tls",
+        nargs="+",
+        default=(),
+        metavar="HOST:PORT",
+        help="also live-probe these TLS endpoints with openssl; passing this flag is the "
+        "operator's consent, recorded on each probe target (Lock §5 row 1)",
+    )
+    quickscan_parser.add_argument("--json", action="store_true")
+    quickscan_parser.add_argument(
+        "--rollout-y-days",
+        type=int,
+        default=None,
+        help="enables ledger/risk banding, sector view and CBOM export; no cited default "
+        "exists (data/scenarios.yaml), so it is opt-in here exactly as ledger-run requires "
+        "it explicitly -- omit it for a discovery+correlation+recommendations-only pass",
+    )
+    quickscan_parser.add_argument(
+        "--scenario", default="Z_central", help="a scenario id from data/scenarios.yaml (default: Z_central)"
+    )
+    quickscan_parser.add_argument(
+        "--context",
+        default=None,
+        metavar="FILE",
+        help="a Declarations file (same format as `ecdat assemble --declarations`) declaring "
+        "which data_lifetime.yaml row applies to this run's surfaces, so bands/sector view "
+        "are not all UNBOUNDED for lack of a declared lifetime (Pramana_Ledger_Spec.md §5.3); "
+        "pass the literal word 'example' for the shipped "
+        "examples/quickscan-context.example.yaml",
+    )
+    quickscan_parser.add_argument(
+        "--capture",
+        default=CaptureMode.SINCE_CONFIRMED.value,
+        choices=[CaptureMode.SINCE_CONFIRMED.value, CaptureMode.SINCE_POSSIBLE.value],
+        help="capture_assumption mode (§5.4), same knob as `ledger-run --capture`; default "
+        "SINCE_CONFIRMED (conservative -- a capability-only finding with no confirmed "
+        "traffic, e.g. a bare certificate on disk, stays UNBOUNDED under it by design; "
+        "SINCE_POSSIBLE gives it a band anyway, at the pessimistic reading). "
+        "--capture-since/SINCE_DATE is not exposed here -- use `ecdat ledger-run` directly "
+        "for that",
+    )
+    quickscan_parser.add_argument(
+        "--accept-inferred",
+        action="store_true",
+        help="same knob as `ledger-run --accept-inferred`: let an INFERRED input (e.g. a "
+        "keyUsage-derived capability, never an observed traffic snapshot) participate in "
+        "banding instead of forcing UNBOUNDED; default False, the conservative reading",
+    )
+    quickscan_parser.set_defaults(func=_quickscan)
 
     keygen_parser = subparsers.add_parser(
         "keygen", help="generate an Ed25519 signing key for signed CBOM export (OI-013)"

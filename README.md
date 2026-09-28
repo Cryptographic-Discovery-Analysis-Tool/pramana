@@ -6,6 +6,32 @@ Built for Smart India Hackathon problem statement **SIH26164**.
 
 ---
 
+## Quick start
+
+```bash
+pip install -e ".[dev,api]"
+ecdat quickscan /path/to/a/folder --sector bfsi
+```
+
+`quickscan` is the fastest way to see Pramāṇa do something: point it at a folder and it
+auto-discovers which adapters apply (certificates/keystores, Kubernetes `kind: Secret`
+manifests, Spring config, package manifests/jars if `trivy` is on `PATH`, source files if
+`semgrep` is on `PATH`), runs them, correlates the findings into one asset view, generates
+purpose-based recommendations, and (once you add `--rollout-y-days N`, since no cited default
+exists for that number) also produces exposure bands, a sector traffic-light view and a
+CycloneDX CBOM export -- all in one command, in seconds on a small folder. An adapter whose
+tool is not installed is skipped with a one-line reason, never faked. Add `--json` for
+machine-readable output, `--out DIR` to choose where artifacts land (default
+`./pramana-out/<timestamp>`), and `--live-tls host:port ...` to also probe live TLS endpoints.
+Bands/sector view stay honestly `UNBOUNDED`/`no_deadline` until you also declare a data-class
+lifetime with `--context example` (or your own file -- see
+`examples/quickscan-context.example.yaml`); `--capture SINCE_POSSIBLE`/`--accept-inferred` may
+be needed too for a capability-only finding (a bare certificate, never an observed handshake) to
+band at all -- quickscan prints which and why when it can't.
+
+See `ecdat quickscan --help`, and `## Command line` below for every other subcommand
+(`scan`, `correlate`, `ledger-run`, `sector-report`, `cbom-import`, ...) `quickscan` builds on.
+
 ## Requirements
 
 - Python 3.12+
