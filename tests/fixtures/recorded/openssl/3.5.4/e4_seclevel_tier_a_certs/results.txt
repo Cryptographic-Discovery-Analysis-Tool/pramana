@@ -14,17 +14,16 @@ $ openssl x509 -in pay-edge/cert.pem -noout -text | grep -E 'Public-Key|Signatur
 --- s_client at default seclevel (1) against pay-edge (ECDSA P-256) ---
 $ openssl s_client -connect 127.0.0.1:8443 -tls1_2 -cipher ECDHE-ECDSA-AES128-GCM-SHA256 -brief
 Connecting to 127.0.0.1
-depth=0 O=Harness Payments, CN=pay-edge
+Can't use SSL_get_servername
+depth=1 O=Harness Intermediate CA (ECC), CN=Harness Intermediate CA ECC
 verify error:num=20:unable to get local issuer certificate
-depth=0 O=Harness Payments, CN=pay-edge
-verify error:num=21:unable to verify the first certificate
 CONNECTION ESTABLISHED
 Protocol version: TLSv1.2
 Ciphersuite: ECDHE-ECDSA-AES128-GCM-SHA256
 Peer certificate: O=Harness Payments, CN=pay-edge
 Hash used: SHA256
 Signature type: ecdsa_secp256r1_sha256
-Verification error: unable to verify the first certificate
+Verification error: unable to get local issuer certificate
 Supported Elliptic Curve Point Formats: uncompressed:ansiX962_compressed_prime:ansiX962_compressed_char2
 Peer Temp Key: X25519, 253 bits
 DONE
@@ -32,7 +31,21 @@ DONE
 --- s_client with cipherstring forcing @SECLEVEL=4 (192-bit minimum) against the same P-256 cert ---
 $ openssl s_client -connect 127.0.0.1:8443 -tls1_2 -cipher "ECDHE-ECDSA-AES128-GCM-SHA256:@SECLEVEL=4" -brief
 Connecting to 127.0.0.1
-0C120000:error:0A0000B5:SSL routines:ssl_cipher_list_to_bytes:no ciphers available:../openssl-3.5.4/ssl/statem/statem_clnt.c:4176:No ciphers enabled for max supported SSL/TLS version
+907D0000:error:0A0000B5:SSL routines:ssl_cipher_list_to_bytes:no ciphers available:../openssl-3.5.4/ssl/statem/statem_clnt.c:4176:No ciphers enabled for max supported SSL/TLS version
 
 --- x509 -noout -checkend / -verify with -verify_ip / seclevel via -policy_check is N/A; using x509 -engine seclevel via cipher context is the mechanism above. Also test cert chain verify at seclevel 4: ---
 pay-edge/cert.pem: OK
+
+-- Re-recorded 2026-09-27 (ecdat-harness PKI bump; NOT_BEFORE moved to
+2026-09-27, see ecdat-harness/README.md "Deterministic PKI" -> "Bumping the
+PKI" and docs/open-issues.md OI-019). Ran against a local `openssl s_server
+-accept 8443 -cert pay-edge/cert.pem -key pay-edge/key.pem -cert_chain
+int-ca-ecc/cert.pem -www` (openssl 3.5.4, Git Bash /mingw64/bin/openssl.exe),
+started/stopped for this recording only; no s_server left running. The
+verify-error text differs slightly from the original 2026-09-26 capture
+("unable to get local issuer certificate" at depth=1 vs. the earlier
+two-line depth=0 "unable to verify the first certificate") because this run
+served the chain via `-cert_chain` explicitly rather than a single combined
+PEM; the substantive result (handshake succeeds at default seclevel,
+correctly refused once ECDHE-ECDSA-AES128-GCM-SHA256 is combined with
+@SECLEVEL=4, chain verifies OK) is unchanged.

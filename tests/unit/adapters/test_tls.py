@@ -122,7 +122,7 @@ def test_sslyze_leaf_hash_is_canonicalised_the_same_way_certs_x509_computes_it()
     # `openssl x509 ... -pubkey | openssl pkey -pubin -outform DER | sha256sum`
     # (spki_sha256) against the on-disk pay-edge leaf certificate.
     assert observation.leaf_der_sha256 == (
-        "895918125bb67ae82ea1eb1897b051ecf149902454193cd277298eef4f3120f3"
+        "4824805cd0e41ccb711b0da60eb833ff047695c452b416013d8a0853c0cc7bb0"
     )
     assert observation.leaf_spki_sha256 == (
         "133afc2d59061ec4a826fbc664de07721bc086f5c05946dac254e70d3a935200"
@@ -199,7 +199,7 @@ def test_the_finding_carries_a_der_sha256_field_named_like_certs_x509s():
     # `openssl x509 ... -pubkey | openssl pkey -pubin -outform DER | sha256sum`
     # (spki_sha256) against the on-disk pay-edge leaf certificate.
     assert finding.fields["der_sha256"].value == (
-        "895918125bb67ae82ea1eb1897b051ecf149902454193cd277298eef4f3120f3"
+        "4824805cd0e41ccb711b0da60eb833ff047695c452b416013d8a0853c0cc7bb0"
     )
     assert finding.fields["der_sha256"].state == EpistemicState.KNOWN
     assert finding.fields["spki_sha256"].value == (
