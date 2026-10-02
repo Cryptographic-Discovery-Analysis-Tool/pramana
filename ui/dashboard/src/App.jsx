@@ -6,6 +6,7 @@ import Coverage from './Coverage.jsx'
 import Recommend from './Recommend.jsx'
 import EvidenceCard from './EvidenceCard.jsx'
 import Graph from './Graph.jsx'
+import Sector from './Sector.jsx'
 import { apiFetch } from './api.js'
 
 // Presentation only. Every band, window and deadline shown here is computed by
@@ -15,6 +16,7 @@ import { apiFetch } from './api.js'
 
 const TABS = [
   ['ledger', 'Ledger'],
+  ['sector', 'Sector view'],
   ['closure', 'Closure queue'],
   ['recommend', 'Move to'],
   ['coverage', 'Coverage'],
@@ -49,6 +51,12 @@ export default function App() {
   const [selected, setSelected] = useState(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
+
+  // India sector-specific compliance view (SIH26164).
+  const [sectors, setSectors] = useState(null)
+  const [sector, setSector] = useState('bfsi')
+  const [includeGlobal, setIncludeGlobal] = useState(false)
+  const [sectorReport, setSectorReport] = useState(null)
 
   const query = useMemo(() => {
     const q = new URLSearchParams({
@@ -110,6 +118,31 @@ export default function App() {
       cancelled = true
     }
   }, [query])
+
+  useEffect(() => {
+    apiFetch('api/sectors')
+      .then((r) => r.json())
+      .then(setSectors)
+      .catch((e) => setError(String(e)))
+  }, [])
+
+  useEffect(() => {
+    if (tab !== 'sector') return
+    let cancelled = false
+    const q = new URLSearchParams(query)
+    q.set('sector', sector)
+    q.set('include_global', String(includeGlobal))
+    apiFetch(`api/sector-report?${q.toString()}`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`sector-report: ${r.status}`)
+        return r.json()
+      })
+      .then((body) => !cancelled && setSectorReport(body))
+      .catch((e) => !cancelled && setError(String(e.message ?? e)))
+    return () => {
+      cancelled = true
+    }
+  }, [tab, sector, includeGlobal, query])
 
   const openRecord = useCallback(
     (recordId) => {
@@ -198,6 +231,16 @@ export default function App() {
 
         {tab === 'ledger' && data.ledger && (
           <Ledger data={data.ledger} onSelect={openRecord} />
+        )}
+        {tab === 'sector' && (
+          <Sector
+            sectors={sectors}
+            sector={sector}
+            onSectorChange={setSector}
+            includeGlobal={includeGlobal}
+            onIncludeGlobalChange={setIncludeGlobal}
+            data={sectorReport}
+          />
         )}
         {tab === 'closure' && data.closure && <Closure data={data.closure} />}
         {tab === 'recommend' && recommendations && <Recommend data={recommendations} />}

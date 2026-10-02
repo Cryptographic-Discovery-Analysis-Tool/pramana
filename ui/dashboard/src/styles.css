@@ -204,6 +204,14 @@ tbody tr:hover td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
 .band-SAVABLE { color: var(--text); }
 .band-SAFE, .band-SAFE_UNTIL_Z { color: var(--accent); }
 
+/* India sector view (SIH26164): a traffic light over policy deadlines, kept
+   visually distinct from the ledger's own bands -- it is a different axis
+   (regulator-facing timing), never a re-derivation of the band above. */
+.band-sector-overdue { color: var(--alert); }
+.band-sector-at_risk { color: var(--warn); }
+.band-sector-on_track { color: var(--accent); }
+.band-sector-no_deadline { color: var(--dim); }
+
 .graph-edge {
   padding: 8px 0;
   border-bottom: 1px solid var(--line);

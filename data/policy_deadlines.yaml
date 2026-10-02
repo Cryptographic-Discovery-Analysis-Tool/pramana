@@ -237,3 +237,53 @@ policies:
       recorded here rather than inventing one; see docs/sources/ for the
       full quote and search notes.
     milestones: []
+  - key: IN_RBI_CYBERSEC_MD
+    label: "India RBI Cybersecurity, Technology: Risk, Resilience and Assurance Framework Directions, 2026 (commercial banks) -- crypto-agility (no dated PQC milestone)"
+    applies_to: quantum_vulnerable
+    usable: false
+    citation: "docs/sources/IN_RBI_Cybersecurity_TRRA_MD_2026.md"
+    quote: "The key length, algorithms, cipher suites and applicable protocols used in transmission channels, processing of data and authentication purpose shall be strong."
+    why_not_usable: >-
+      RBI/DoS/2026-27/410 (issued 31 July 2026, effective immediately) requires
+      "strong" key length/algorithms/cipher suites and adoption of standards "not
+      deprecated / demonstrated to be insecure / vulnerable" (para 140), but states no
+      quantum, post-quantum, PQC, or cryptographic-migration date anywhere in the
+      fetched text. This is a standing, undated obligation from the effective date, not
+      a future compliance milestone the Milestone schema's required `date` field can
+      represent without guessing one. See docs/sources/ for the fetch limitation (no
+      independently vendored PDF/SHA-256 for this HTML-viewed Master Direction).
+    milestones: []
+
+  - key: IN_RBI_QSAFE
+    label: "India RBI Q-SAFE Expert Committee -- financial-sector CBOM & crypto-agility review (no dated milestone)"
+    applies_to: quantum_vulnerable
+    usable: false
+    citation: "docs/sources/IN_RBI_QSAFE_Committee_2026.md"
+    quote: "The Committee will submit its report within six months from the date of its first meeting."
+    why_not_usable: >-
+      RBI Press Release 2026-2027/325 (25 May 2026) constitutes an Expert Committee
+      (convened by Prof. Anil Prabhakar, IIT Madras) to evaluate the financial sector's
+      cryptographic inventory via a CBOM and recommend a PQC roadmap for the financial
+      system. Its own reporting deadline is relative ("six months from the date of its
+      first meeting") and that first-meeting date is not stated in the press release or
+      found elsewhere, so no calendar date can be derived without guessing. Recorded as
+      an undated BFSI obligation in data/sector_profiles.yaml instead.
+    milestones: []
+
+  - key: IN_TEC_PQC
+    label: "India TEC 910018:2025 -- PQC migration technical report, telecom sector (informational, no mandate date)"
+    applies_to: quantum_vulnerable
+    usable: false
+    citation: "docs/sources/IN_TEC_PQC_Migration_Report_2025.md"
+    quote: "Telecom Sector - To secure OSS (operation support system) and BSS (Business support system) applications"
+    why_not_usable: >-
+      TEC 910018:2025 (Telecommunication Engineering Centre, DoT, Release 1.0, January
+      2025) is a technical/advisory report "based on the consensus built upon the
+      contributions of the member[s]" of a TEC committee, not a DoT circular or
+      regulatory mandate. It contains PQC migration guidance and telecom use cases
+      (Annexure-I) but no compliance date, mandate language, or deadline binding
+      operators or equipment vendors. A search for a separate DoT mandate requiring PQC
+      readiness for new telecom equipment from 2026 found none (see the source file for
+      what was checked). Recorded as an undated telecom obligation reference in
+      data/sector_profiles.yaml instead.
+    milestones: []

@@ -44,3 +44,28 @@ Only the Tier-1/Tier-2 December-2026 date is vendored as a policy milestone
 here; Tier-3 has no single stated date of its own (it inherits the
 Long-Term-Actions heading's "By 2033 | CII by 2029" range, already covered
 by the Milestone-3 full-migration dates above).
+
+## Which sectors count as CII for the accelerated timeline (printed p. 36, §9.0)
+
+De-spaced from the PDF text, exact words (re-fetched 2026-09-27, same SHA-256 as above,
+confirming the same 140-page file):
+
+> "CII sectors – government, strategic, defence, power, telecom, transport, and Banking,
+> Financial Services and Insurance (BFSI) – will follow accelerated timelines:
+> Foundations by 2027, High-Priority Migration by 2028, and Full PQC Adoption by 2029.
+> Other enterprises will follow the baseline timelines of 2028, 2030, and 2033
+> respectively."
+
+This is the source `data/sector_profiles.yaml` cites for putting the `bfsi` and
+`telecom` sector lenses on the `IN_DST_CII` accelerated dates (they are named here),
+and for putting the `government_enterprise` (non-CII) lens on `IN_DST_ENTERPRISE`'s
+baseline dates. Central/state government bodies that are themselves part of the named
+"government" CII sub-sector belong under the `cii` sector lens, not
+`government_enterprise` -- see the note in `data/sector_profiles.yaml`.
+
+## Vendor CBOM mandatory FY2027-28 -- undated in data/policy_deadlines.yaml
+
+Per "CBOM in procurement" above, FY2027-28 is a fiscal year, not a calendar date; no day
+is stated. `risk/policy.py`'s `Milestone.date` is a calendar `date`, so no milestone
+entry is added for it here (it would require guessing a day, which CLAUDE.md forbids).
+It remains a documented gap, carried honestly rather than approximated.

@@ -1,0 +1,99 @@
+# Sector -> policy mapping for India sector-specific compliance views.
+#
+# A "sector" here is a lens the operator selects (BFSI, Telecom, Critical
+# Information Infrastructure, Government/general enterprise). Each sector
+# lists the policy rows (data/policy_deadlines.yaml keys) that apply to it.
+# The mapping itself is a citable claim -- "this policy applies to this
+# sector" -- and is checked by tools/ci/check_data_citations.py exactly like
+# any other data/ row: every dict with a `usable` key must carry a citation
+# to a non-empty in-repo file and the exact quote that supports it.
+#
+# A policy row can itself be `usable: false` in policy_deadlines.yaml (no
+# dated milestone) and still be mapped here -- the sector view then shows it
+# as "obligation, no deadline" rather than a traffic-light date. See
+# src/ecdat/risk/sector.py for how the two are combined.
+#
+# CII sector membership and the CII-vs-Enterprise timeline split both come
+# from docs/sources/India_DST_Quantum_Safe_Roadmap_2026.md, printed p.36,
+# which names BFSI and telecom as CII sub-sectors directly (so those two
+# sectors carry the accelerated IN_DST_CII dates, not the baseline
+# IN_DST_ENTERPRISE dates). "government_enterprise" is the baseline lens for
+# organisations *not* named in that CII list; a central/state government
+# body that is itself part of the named "government" CII sub-sector belongs
+# under the `cii` sector instead, not `government_enterprise` -- this tool
+# does not attempt to auto-classify that distinction, the operator picks it.
+schema_version: 1
+
+sectors:
+  - key: bfsi
+    label: "BFSI (Banking, Financial Services & Insurance)"
+    usable: true
+    citation: "docs/sources/India_DST_Quantum_Safe_Roadmap_2026.md -- printed p.36"
+    quote: "CII sectors – government, strategic, defence, power, telecom, transport, and Banking, Financial Services and Insurance (BFSI) – will follow accelerated timelines"
+    policies:
+      - policy_key: IN_DST_CII
+        usable: true
+        citation: "docs/sources/India_DST_Quantum_Safe_Roadmap_2026.md -- printed p.36"
+        quote: "CII sectors – government, strategic, defence, power, telecom, transport, and Banking, Financial Services and Insurance (BFSI) – will follow accelerated timelines: Foundations by 2027, High-Priority Migration by 2028, and Full PQC Adoption by 2029."
+      - policy_key: IN_SEBI_CSCRF
+        usable: true
+        citation: "docs/sources/IN_SEBI_CSCRF_2024.md"
+        quote: "REs shall maintain an inventory of cryptographic assets, prioritizing critical assets for Post Quantum Cryptography (PQC) migration, and assess their IT infrastructure capabilities."
+      - policy_key: IN_RBI_CYBERSEC_MD
+        usable: true
+        citation: "docs/sources/IN_RBI_Cybersecurity_TRRA_MD_2026.md"
+        quote: "The key length, algorithms, cipher suites and applicable protocols used in transmission channels, processing of data and authentication purpose shall be strong."
+      - policy_key: IN_RBI_QSAFE
+        usable: true
+        citation: "docs/sources/IN_RBI_QSAFE_Committee_2026.md"
+        quote: "Evaluate the financial sector's cryptographic inventory through a Cryptography Bill of Materials (CBOM), assess crypto agility and identify the critical systems and processes most vulnerable to such threats."
+
+  - key: telecom
+    label: "Telecom"
+    usable: true
+    citation: "docs/sources/India_DST_Quantum_Safe_Roadmap_2026.md -- printed p.36"
+    quote: "CII sectors – government, strategic, defence, power, telecom, transport, and Banking, Financial Services and Insurance (BFSI) – will follow accelerated timelines"
+    policies:
+      - policy_key: IN_DST_CII
+        usable: true
+        citation: "docs/sources/India_DST_Quantum_Safe_Roadmap_2026.md -- printed p.36"
+        quote: "CII sectors – government, strategic, defence, power, telecom, transport, and Banking, Financial Services and Insurance (BFSI) – will follow accelerated timelines: Foundations by 2027, High-Priority Migration by 2028, and Full PQC Adoption by 2029."
+      - policy_key: IN_TEC_PQC
+        usable: true
+        citation: "docs/sources/IN_TEC_PQC_Migration_Report_2025.md"
+        quote: "Telecom Sector - To secure OSS (operation support system) and BSS (Business support system) applications"
+
+  - key: cii
+    label: "Critical Information Infrastructure (CII)"
+    usable: true
+    citation: "docs/sources/India_DST_Quantum_Safe_Roadmap_2026.md -- printed p.36"
+    quote: "CII sectors – government, strategic, defence, power, telecom, transport, and Banking, Financial Services and Insurance (BFSI) – will follow accelerated timelines"
+    policies:
+      - policy_key: IN_DST_CII
+        usable: true
+        citation: "docs/sources/India_DST_Quantum_Safe_Roadmap_2026.md -- printed p.36"
+        quote: "CII sectors – government, strategic, defence, power, telecom, transport, and Banking, Financial Services and Insurance (BFSI) – will follow accelerated timelines: Foundations by 2027, High-Priority Migration by 2028, and Full PQC Adoption by 2029."
+
+  - key: government_enterprise
+    label: "Government / General Enterprise"
+    usable: true
+    citation: "docs/sources/India_DST_Quantum_Safe_Roadmap_2026.md -- printed p.36"
+    quote: "Other enterprises will follow the baseline timelines of 2028, 2030, and 2033 respectively."
+    policies:
+      - policy_key: IN_DST_ENTERPRISE
+        usable: true
+        citation: "docs/sources/India_DST_Quantum_Safe_Roadmap_2026.md -- printed p.36"
+        quote: "Other enterprises will follow the baseline timelines of 2028, 2030, and 2033 respectively."
+
+# Global (non-India) policy rows an operator may optionally overlay on any
+# sector lens above -- these are not sector-specific, so they are listed
+# once here rather than repeated under every sector. Each key must already
+# exist, usable, in data/policy_deadlines.yaml.
+global_policies:
+  - NIST_IR_8547_IPD
+  - EU_HIGH_RISK
+  - EU_MEDIUM_RISK
+  - US_EO14412_HVA
+  - CA_CCCS_ITSM40001
+  - DE_BSI_TR02102_KEY_AGREEMENT
+  - DE_BSI_TR02102_SIGNATURES
