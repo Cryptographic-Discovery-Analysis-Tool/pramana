@@ -1206,6 +1206,7 @@ def _quickscan(args: argparse.Namespace) -> int:
             context=args.context,
             capture=args.capture,
             accept_inferred=args.accept_inferred,
+            keystore_password=args.keystore_password,
         )
     except NotADirectoryError as exc:
         print(str(exc), file=sys.stderr)
@@ -1593,6 +1594,15 @@ def main(argv: list[str] | None = None) -> int:
         help="same knob as `ledger-run --accept-inferred`: let an INFERRED input (e.g. a "
         "keyUsage-derived capability, never an observed traffic snapshot) participate in "
         "banding instead of forcing UNBOUNDED; default False, the conservative reading",
+    )
+    quickscan_parser.add_argument(
+        "--keystore-password",
+        default=None,
+        help="certs-x509 only, same knob as `ecdat scan --keystore-password`: PKCS#12 "
+        "keystore password, if needed (held in memory only, never logged/recorded -- see "
+        "adapters/certs/parser.py::load_pkcs12); without it, a password-protected .p12/.pfx "
+        "keystore is silently skipped (per-file, not a run failure) and its certificate/key "
+        "never reaches correlation, which under-reports quantum-vulnerable assets",
     )
     quickscan_parser.set_defaults(func=_quickscan)
 

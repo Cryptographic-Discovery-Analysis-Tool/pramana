@@ -8,10 +8,13 @@ X25519MLKEM768 was ever made, per data/base_confidence.yaml's own rule).
 from __future__ import annotations
 
 from ecdat.data.crypto_families import (
+    algorithm_component,
+    canonical_family,
     hybrid_group_codepoint,
     hybrid_groups,
     is_deprecated_hybrid_group,
     is_hybrid_group,
+    is_shor_broken,
 )
 
 
@@ -66,3 +69,59 @@ def test_an_unlisted_group_is_not_deprecated_by_default():
     """No guessing: an unlisted spelling is neither hybrid nor deprecated."""
     assert is_deprecated_hybrid_group("SecP521r1MLKEM1024") is False
     assert is_deprecated_hybrid_group(None) is False
+
+
+# --- 2026-09-28 quickscan demo root cause: missing family_aliases rows -------
+# (docs/sources/IETF_RFC_5480_2009.md, docs/sources/IETF_RFC_8017_2016.md)
+
+
+def test_secp384r1_and_secp521r1_now_alias_to_their_nist_family():
+    assert canonical_family("secp384r1") == "P-384"
+    assert canonical_family("secp521r1") == "P-521"
+    assert is_shor_broken(canonical_family("secp384r1")) is True
+    assert is_shor_broken(canonical_family("secp521r1")) is True
+
+
+def test_rsaencryption_oid_name_aliases_to_rsa():
+    assert canonical_family("rsaEncryption") == "RSA"
+    assert is_shor_broken(canonical_family("rsaEncryption")) is True
+
+
+def test_an_unlisted_curve_spelling_is_still_unaliased():
+    """No guessing by pattern: secp224r1 (P-224) has no alias row yet."""
+    assert canonical_family("secp224r1") == "secp224r1"
+
+
+# --- ECDH/AES/DSA families added directly to `families` (not aliases) -------
+
+
+def test_generic_ecdh_is_shor_broken():
+    assert is_shor_broken("ECDH") is True
+
+
+def test_aes_is_not_shor_broken():
+    assert is_shor_broken("AES") is False
+
+
+def test_dsa_is_shor_broken():
+    assert is_shor_broken("DSA") is True
+
+
+# --- algorithm_component(): JCA transformation string -> algorithm ----------
+# (docs/sources/Oracle_JavaSE17_Cipher_Transformation.md)
+
+
+def test_algorithm_component_splits_cipher_transformation():
+    assert algorithm_component("RSA/ECB/OAEPWithSHA-256AndMGF1Padding") == "RSA"
+    assert algorithm_component("AES/GCM/NoPadding") == "AES"
+
+
+def test_algorithm_component_passes_through_a_bare_algorithm_name():
+    # Mac/MessageDigest algorithm names have no "/" at all.
+    assert algorithm_component("HmacSHA256") == "HmacSHA256"
+    assert algorithm_component("MD5") == "MD5"
+    assert algorithm_component("ECDH") == "ECDH"
+
+
+def test_algorithm_component_of_none_is_none():
+    assert algorithm_component(None) is None

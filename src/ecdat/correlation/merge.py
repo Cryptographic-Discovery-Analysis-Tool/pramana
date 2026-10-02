@@ -93,9 +93,17 @@ _KEY_SIGNATURES: tuple[tuple[frozenset[str], tuple[str, ...]], ...] = (
 #: Candidate field names for CryptoAsset's plain `algorithm_family` readback,
 #: tried in this order. Convenience only -- the evidentiary field is
 #: whichever of these actually exists in `fields`, per-Finding, unchanged.
+#: "algorithm" is `adapters/source/semgrep.py`'s field name for a call
+#: site's literal JCA algorithm/transformation string (e.g. "RSA/ECB/OAEP...",
+#: "AES/GCM/NoPadding", "HmacSHA256") -- added 2026-09-28 (quickscan demo
+#: root cause: without it, no source-semgrep Finding ever carried an
+#: `algorithm_family` at all, so a concrete algorithm found in Java source
+#: was silently excluded from every quantum-vulnerable count rather than
+#: showing up as vulnerable, not-vulnerable or honestly unclassified).
 _ALGORITHM_FAMILY_READBACK_CANDIDATES: tuple[str, ...] = (
     "public_key_algorithm",
     "negotiated_group",
+    "algorithm",
 )
 
 

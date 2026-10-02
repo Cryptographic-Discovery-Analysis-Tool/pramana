@@ -107,6 +107,25 @@ def is_shor_broken(family: str) -> bool:
     raise NoCitedFamilyError(f"{family!r} has no row in the crypto-family registry")
 
 
+def algorithm_component(value: str | None) -> str | None:
+    """The algorithm component of a JCA transformation string.
+
+    `Cipher.getInstance(...)`'s argument is "algorithm/mode/padding" or bare
+    "algorithm" (Java SE Cipher API doc; see
+    docs/sources/Oracle_JavaSE17_Cipher_Transformation.md) -- e.g.
+    `adapters/source/semgrep.py`'s `algorithm` field can be
+    "RSA/ECB/OAEPWithSHA-256AndMGF1Padding" or "AES/GCM/NoPadding", not a
+    bare family name. This is a pure string-format split (first `/`-segment),
+    never a classification -- `Mac`/`MessageDigest` algorithm names
+    (e.g. "HmacSHA256", "MD5") have no `/` at all and pass through
+    unchanged. Classification still only ever comes from
+    `data/crypto_families.yaml` via `canonical_family`/`is_shor_broken`.
+    """
+    if value is None:
+        return None
+    return value.split("/", 1)[0]
+
+
 def canonical_family(name: str | None) -> str | None:
     """Resolve a wire/tool spelling to the family spelling the registry uses.
 

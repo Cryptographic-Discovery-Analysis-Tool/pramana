@@ -39,6 +39,14 @@
 # TEST.A_SESSION for tls-endpoint. No single frozen row states both a
 # meaningful X and a meaningful A together; that gap is data/data_lifetime.yaml's
 # own, not invented here.
+# `surface: source` below is a quickscan-only shorthand, not a literal
+# surface id `Declarations.binding_for` would ever match on its own
+# (`assemble.bridge._from_source` builds each call site's real surface id as
+# `f"source:{path}"`, one per file -- there is no bare "source" surface).
+# Fixed 2026-09-28 (quickscan demo root cause #2): `quickscan._load_context`
+# expands any binding literally spelled `surface: source` into one binding
+# per file a `source-semgrep` finding actually named in this run, so it
+# reaches every real per-file surface id instead of silently matching none.
 bindings:
   - surface: "certdir:{target}"
     data_class: TEST.A_15Y

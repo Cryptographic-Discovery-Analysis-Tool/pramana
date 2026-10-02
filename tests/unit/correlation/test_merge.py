@@ -214,3 +214,70 @@ def test_two_tls_probes_disagreeing_group_same_endpoint_merge_and_conflict():
     assert len(assets) == 1
     assert assets[0].fields["negotiated_group"].state == EpistemicState.CONFLICTING
     assert assets[0].algorithm_family is None
+
+
+# --- source-semgrep's `algorithm` field -------------------------------------
+#
+# Regression (2026-09-28, quickscan demo root cause #1): source-semgrep
+# matches neither `_KEY_SIGNATURES` signature (no `public_key_algorithm`, no
+# `negotiated_group`/`negotiated_cipher_suite`), so it correctly gets no
+# algorithm-based *merge* (module docstring) -- but before this fix, its
+# `algorithm` field was also never read back onto `CryptoAsset.algorithm_family`
+# at all, so a concrete literal algorithm found in Java source (e.g. a
+# `Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding")` call site)
+# never contributed to any quantum-vulnerable count -- not even as
+# "unclassified". `_ALGORITHM_FAMILY_READBACK_CANDIDATES` now includes
+# "algorithm" as a third candidate.
+
+
+def _semgrep_call_site_finding(finding_id: str, *, surface: str, algorithm: str) -> Finding:
+    """Shaped like SemgrepSourceAdapter._fields_for_call_site() (src/ecdat/
+    adapters/source/semgrep.py) for a literal-algorithm Cipher/Mac/
+    MessageDigest call site: path/line/reachable/purpose plus the literal
+    `algorithm` field this test cares about."""
+    return Finding(
+        finding_id=finding_id,
+        surface=surface,
+        evidence_refs=("ev-1",),
+        fields={
+            "path": _known("Foo.java"),
+            "line": _known(42),
+            "reachable": FieldValue(value=None, state=EpistemicState.UNKNOWN),
+            "purpose": FieldValue(value=None, state=EpistemicState.UNKNOWN),
+            "algorithm": _known(algorithm),
+        },
+    )
+
+
+def test_semgrep_literal_transformation_string_becomes_the_assets_algorithm_family():
+    finding = _semgrep_call_site_finding(
+        "semgrep-1", surface="source", algorithm="RSA/ECB/OAEPWithSHA-256AndMGF1Padding"
+    )
+
+    (asset,) = merge_within_surface([finding])
+
+    # The raw transformation string is what CryptoAsset carries (readback is
+    # a plain, unmodified field readback) -- splitting it down to the bare
+    # "RSA" family is `quickscan._classify_family`'s job
+    # (ecdat.data.crypto_families.algorithm_component), not merge's.
+    assert asset.algorithm_family == "RSA/ECB/OAEPWithSHA-256AndMGF1Padding"
+
+
+def test_semgrep_nonliteral_algorithm_never_becomes_a_guessed_family():
+    finding = Finding(
+        finding_id="semgrep-2",
+        surface="source",
+        evidence_refs=("ev-1",),
+        fields={
+            "path": _known("Foo.java"),
+            "line": _known(10),
+            "reachable": FieldValue(value=None, state=EpistemicState.UNKNOWN),
+            "purpose": FieldValue(value=None, state=EpistemicState.UNKNOWN),
+            "algorithm": FieldValue(value=None, state=EpistemicState.UNKNOWN),
+            "algorithm_argument": _known("props.getTransformation()"),
+        },
+    )
+
+    (asset,) = merge_within_surface([finding])
+
+    assert asset.algorithm_family is None

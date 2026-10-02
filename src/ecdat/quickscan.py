@@ -62,9 +62,15 @@ from ecdat.adapters.base import AdapterRunResult
 from ecdat.adapters.certs.parser import CERTIFICATE_SUFFIXES
 from ecdat.adapters.live_launcher import resolve_launcher_prefix, resolve_tool_bin
 from ecdat.assemble import Declarations, assemble
+from ecdat.assemble.bridge import BindingDeclaration
 from ecdat.context.binding import Lifetime
 from ecdat.correlation.engine import ForbiddenEdgeError, correlate
-from ecdat.data.crypto_families import NoCitedFamilyError, canonical_family, is_shor_broken
+from ecdat.data.crypto_families import (
+    NoCitedFamilyError,
+    algorithm_component,
+    canonical_family,
+    is_shor_broken,
+)
 from ecdat.export.cyclonedx import build_bom
 from ecdat.export.signing import sign_bom, signing_key_from_env
 from ecdat.recommend.engine import Profile, recommend
@@ -215,13 +221,23 @@ def _classify_family(algorithm_family: str | None, curve: str | None) -> tuple[s
     matches were EC certs/keys, because `is_shor_broken("EC")` has no row
     and was being swallowed as if EC were simply not vulnerable.
 
-    A curve with no alias row yet (e.g. "secp384r1" today -- only
-    secp256r1/prime256v1 are aliased) has no citable path and returns
-    `None` (unclassified) rather than a guessed True/False.
+    A curve/algorithm with no alias row (e.g. an unlisted curve, or a JCA
+    algorithm name with no `data/crypto_families.yaml` row at all -- MD5,
+    HmacSHA256, ...) has no citable path and returns `None` (unclassified)
+    rather than a guessed True/False.
+
+    `algorithm_family` may also be a `source-semgrep` call-site's raw JCA
+    transformation string (e.g. "RSA/ECB/OAEPWithSHA-256AndMGF1Padding",
+    "AES/GCM/NoPadding") rather than a bare family name --
+    `data.crypto_families.algorithm_component()` splits that down to its
+    algorithm component (see docs/sources/Oracle_JavaSE17_Cipher_Transformation.md)
+    before the alias/classification lookup; a `Mac`/`MessageDigest` name
+    with no "/" (e.g. "HmacSHA256") passes through unchanged.
     """
     if not algorithm_family:
         return "UNKNOWN", None
     candidate = curve if algorithm_family == "EC" and curve else algorithm_family
+    candidate = algorithm_component(candidate)
     canonical = canonical_family(candidate)
     try:
         return canonical, is_shor_broken(canonical)
@@ -340,7 +356,76 @@ def _substitute_tokens(value: Any, mapping: dict[str, str]) -> Any:
     return value
 
 
-def _load_context(path: Path, *, target: Path, live_tls: tuple[str, ...]) -> Declarations:
+def _source_call_site_paths(results: tuple[AdapterRunResult, ...]) -> tuple[str, ...]:
+    """Every distinct `path` field value among `source-semgrep` findings --
+    exactly the string `assemble.bridge._from_source` embeds in its own
+    per-call-site `surface_id` (`f"source:{path}"`). Used only to expand a
+    `surface: "source"` declaration into the real, per-file surface ids a
+    binding must name to ever match (see `_load_context`)."""
+    paths: list[str] = []
+    for result in results:
+        if result.adapter_id != "source-semgrep":
+            continue
+        for finding in result.findings:
+            field = finding.fields.get("path")
+            if field is not None and field.value is not None and field.value not in paths:
+                paths.append(str(field.value))
+    return tuple(paths)
+
+
+def _expand_bare_source_binding(
+    declarations: Declarations, results: tuple[AdapterRunResult, ...]
+) -> Declarations:
+    """Fix for a genuine binding bug (2026-09-28, quickscan demo root cause
+    #2): `examples/quickscan-context.example.yaml` declares `surface:
+    "source"` intending to cover every source-semgrep call site, but
+    `assemble.bridge._from_source` builds each call site's actual
+    `UsageContext.surface_id` as `f"source:{path}"` (one per file) -- never
+    the bare literal `"source"` (that string is only `Finding.surface`, the
+    adapter/dimension tag, not the ledger's per-file surface identity).
+    `Declarations.binding_for` matches by exact string equality (by design:
+    no wildcard/prefix matching exists, or has ever been reviewed as safe --
+    adding one to the shared `assemble.bridge` module for this one caller
+    would be a bigger, unreviewed change than quickscan's own scope), so a
+    `surface: "source"` declaration silently bound NOTHING: every
+    source-semgrep-derived ledger subject stayed unbound
+    (`binding_key: null`) even with `--context example` supplied, with no
+    error and no note -- exactly the kind of false-quiet gap CLAUDE.md
+    exists to prevent.
+
+    The fix stays inside quickscan (no change to `assemble.bridge` or the
+    `Declarations` model): any declared binding whose `surface` is exactly
+    the literal `"source"` is expanded here into one binding per distinct
+    file path a `source-semgrep` finding in `results` actually reports,
+    naming each real `source:<path>` surface id explicitly. The declared
+    `data_class`/`declared_by` are carried through unchanged -- this invents
+    no new classification, only correct wiring of which surface the
+    operator's own declaration was always meant to reach.
+    """
+    bare = [b for b in declarations.bindings if b.surface == "source"]
+    if not bare:
+        return declarations
+    paths = _source_call_site_paths(results)
+    expanded = [b for b in declarations.bindings if b.surface != "source"]
+    for template in bare:
+        for path in paths:
+            expanded.append(
+                BindingDeclaration(
+                    surface=f"source:{path}",
+                    data_class=template.data_class,
+                    declared_by=template.declared_by,
+                )
+            )
+    return Declarations(bindings=tuple(expanded))
+
+
+def _load_context(
+    path: Path,
+    *,
+    target: Path,
+    live_tls: tuple[str, ...],
+    results: tuple[AdapterRunResult, ...] = (),
+) -> Declarations:
     """Load a `Declarations` file (the exact format `ecdat assemble
     --declarations`/`assemble.bridge.Declarations.load()` already reads --
     see that module's own docstring), after substituting the `{target}` /
@@ -353,6 +438,10 @@ def _load_context(path: Path, *, target: Path, live_tls: tuple[str, ...]) -> Dec
     otherwise unpredictable ahead of a run (they embed the absolute path
     handed to that adapter), which would make a portable example file
     impossible without it.
+
+    A `surface: "source"` declaration is additionally expanded to the real
+    per-file `source:<path>` surface ids the scan actually produced -- see
+    `_expand_bare_source_binding`.
     """
     document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     mapping = {"{target}": str(target)}
@@ -361,7 +450,8 @@ def _load_context(path: Path, *, target: Path, live_tls: tuple[str, ...]) -> Dec
         mapping["{host}"] = host
         mapping["{port}"] = port_text or "443"
     document = _substitute_tokens(document, mapping)
-    return Declarations.model_validate(document)
+    declarations = Declarations.model_validate(document)
+    return _expand_bare_source_binding(declarations, results)
 
 
 def discover(target: Path) -> dict[str, bool]:
@@ -405,7 +495,10 @@ def _target_id(adapter_id: str, target: Path) -> str:
 
 
 def _plan_entries(
-    target: Path, discovered: dict[str, bool], live_tls: tuple[str, ...]
+    target: Path,
+    discovered: dict[str, bool],
+    live_tls: tuple[str, ...],
+    keystore_password: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[DiscoveredAdapter]]:
     entries: list[dict[str, Any]] = []
     rows: list[DiscoveredAdapter] = []
@@ -419,8 +512,14 @@ def _plan_entries(
         }
 
     if discovered["certs-x509"]:
-        entries.append({**base_entry("certs-x509"), "input": str(target)})
-        rows.append(DiscoveredAdapter("certs-x509", True, "certificate/keystore file(s) found"))
+        cert_entry = {**base_entry("certs-x509"), "input": str(target)}
+        if keystore_password is not None:
+            cert_entry["keystore_password"] = keystore_password
+        entries.append(cert_entry)
+        reason = "certificate/keystore file(s) found"
+        if keystore_password is not None:
+            reason += " (--keystore-password supplied for any PKCS#12 keystore)"
+        rows.append(DiscoveredAdapter("certs-x509", True, reason))
     else:
         rows.append(DiscoveredAdapter("certs-x509", False, "no certificate/keystore file found"))
 
@@ -525,6 +624,7 @@ def run_quickscan(
     context: str | None = None,
     capture: str = "SINCE_CONFIRMED",
     accept_inferred: bool = False,
+    keystore_password: str | None = None,
 ) -> QuickscanResult:
     start = time.perf_counter()
     target_path = Path(target)
@@ -536,7 +636,9 @@ def run_quickscan(
     written: list[str] = []
 
     discovered = discover(target_path)
-    entries, discovery_rows = _plan_entries(target_path, discovered, live_tls)
+    entries, discovery_rows = _plan_entries(
+        target_path, discovered, live_tls, keystore_password=keystore_password
+    )
 
     plan_path = resolved_out / "quickscan_plan.json"
     plan_path.write_text(json.dumps(entries, indent=2), encoding="utf-8")
@@ -575,7 +677,9 @@ def run_quickscan(
 
     declarations = Declarations()
     if context:
-        declarations = _load_context(_resolve_context_path(context), target=target_path, live_tls=live_tls)
+        declarations = _load_context(
+            _resolve_context_path(context), target=target_path, live_tls=live_tls, results=results
+        )
     assembly = assemble(results, declarations=declarations)
     subjects_path = resolved_out / "ledger_subjects.json"
     subjects_path.write_text(json.dumps(assembly.to_subjects_document(), indent=2), encoding="utf-8")

@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
+from cryptography.hazmat.primitives.serialization import pkcs12
 from cryptography.x509.oid import NameOID
 
 from ecdat import quickscan as qs
@@ -98,6 +99,33 @@ def _write_ec_cert(path, *, curve=ec.SECP256R1(), cn="ec-test", key_agreement=Tr
         .sign(key, hashes.SHA256())
     )
     path.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+
+
+def _write_rsa_keystore(path, *, password: bytes, cn="gateway"):
+    """A password-protected PKCS#12 keystore holding an RSA cert+key, shaped
+    like the real-world case (docs/deviations.md DEV-019 / 2026-09-28
+    quickscan demo root cause: a keystore's RSA certificate is silently
+    skipped, per-file, when it needs a password quickscan never asked for)."""
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, cn)])
+    certificate = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(subject)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.now(timezone.utc) - timedelta(days=1))
+        .not_valid_after(datetime.now(timezone.utc) + timedelta(days=365))
+        .sign(key, hashes.SHA256())
+    )
+    data = pkcs12.serialize_key_and_certificates(
+        name=cn.encode(),
+        key=key,
+        cert=certificate,
+        cas=None,
+        encryption_algorithm=serialization.BestAvailableEncryption(password),
+    )
+    path.write_bytes(data)
 
 
 def _write_k8s_secret(path):
@@ -358,12 +386,23 @@ def test_classify_family_ec_p256_resolves_via_curve_alias_and_is_vulnerable():
     assert vulnerable is True
 
 
-def test_classify_family_ec_curve_with_no_alias_is_unclassified_not_zero():
-    # secp384r1 (P-384) has no family_aliases row today -- honestly
-    # unclassified, never silently "not vulnerable".
+def test_classify_family_ec_p384_resolves_via_curve_alias_and_is_vulnerable():
+    # Regression (2026-09-28, quickscan demo root cause): secp384r1 (P-384)
+    # had no family_aliases row -- DEV-019 left it "honestly unclassified,
+    # never silently 0" pending exactly this citation
+    # (docs/sources/IETF_RFC_5480_2009.md). Now resolved the same way
+    # secp256r1 already was.
     canonical, vulnerable = qs._classify_family("EC", "secp384r1")
+    assert canonical == "P-384"
+    assert vulnerable is True
+
+
+def test_classify_family_ec_curve_with_no_alias_is_unclassified_not_zero():
+    # secp224r1 (P-224) has no family_aliases row today -- honestly
+    # unclassified, never silently "not vulnerable".
+    canonical, vulnerable = qs._classify_family("EC", "secp224r1")
     assert vulnerable is None
-    assert "secp384r1" in canonical
+    assert "secp224r1" in canonical
 
 
 def test_quantum_vulnerable_count_end_to_end_rsa_and_ec(tmp_path):
@@ -382,9 +421,32 @@ def test_quantum_vulnerable_count_end_to_end_rsa_and_ec(tmp_path):
     assert document["quantum_vulnerable_count"] >= 2
 
 
+def test_password_protected_keystore_is_skipped_without_keystore_password(tmp_path):
+    (tmp_path / "keystore").mkdir()
+    _write_rsa_keystore(tmp_path / "keystore" / "gateway.p12", password=b"changeit")
+
+    result = qs.run_quickscan(str(tmp_path), out_dir=str(tmp_path / "out"))
+    counts = qs._family_counts(result)
+    # No --keystore-password: the RSA cert inside the keystore never opens,
+    # so it never reaches correlation at all (not even "unclassified").
+    assert counts["vulnerable"] == 0
+    assert counts["unclassified"] == 0
+
+
+def test_keystore_password_flag_lets_the_rsa_keystore_be_classified(tmp_path):
+    (tmp_path / "keystore").mkdir()
+    _write_rsa_keystore(tmp_path / "keystore" / "gateway.p12", password=b"changeit")
+
+    result = qs.run_quickscan(
+        str(tmp_path), out_dir=str(tmp_path / "out"), keystore_password="changeit"
+    )
+    counts = qs._family_counts(result)
+    assert counts["vulnerable"] >= 1
+
+
 def test_quantum_vulnerable_count_unclassified_curve_is_reported_separately(tmp_path):
     (tmp_path / "certs").mkdir()
-    _write_ec_cert(tmp_path / "certs" / "p384.pem", curve=ec.SECP384R1(), cn="p384-leaf")
+    _write_ec_cert(tmp_path / "certs" / "p224.pem", curve=ec.SECP224R1(), cn="p224-leaf")
 
     result = qs.run_quickscan(str(tmp_path), out_dir=str(tmp_path / "out"))
     counts = qs._family_counts(result)
