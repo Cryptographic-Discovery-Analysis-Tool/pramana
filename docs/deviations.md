@@ -421,3 +421,58 @@ openssl-only by design; a reader who wants the certificate chain, cipher-suite e
 `der_sha256` cross-surface correlation from a live TLS scan still needs either replay mode fed a
 real recorded sslyze document, or `tools/prober/`'s coordinated vantage. Filed as the same
 still-open item DEV-013 already named, not a new one.
+
+## DEV-014 — new `k8s-secret` adapter: a Kubernetes Secret manifest surface (2026-09-27)
+
+**Context.** No adapter read Kubernetes Secret manifests. A private key or certificate sitting
+base64-encoded in a `kind: Secret` YAML document is a real, common deployment-surface risk
+(plaintext-adjacent key material outside the artefact surface `certs-x509` already covers) and
+CLAUDE.md is explicit that key material at rest anywhere is worth reporting — as a location and a
+fingerprint, never as the bytes. build-plan.md does not enumerate this adapter by name; it is new
+surface coverage, generic to any Kubernetes deployment, not specific to any one target.
+
+**Resolution.** `adapters/k8s_secret/parser.py` and `adapters/k8s_secret/adapter.py` add
+`K8sSecretAdapter` (`adapter_id = k8s-secret`, `support_level = PARTIAL`,
+`dimensions = (DEPLOYMENT,)`) wired into `cli.py`'s `BUILDERS`/`ADAPTERS`/`_build_k8s_secret`
+exactly like `certs-x509`: `--input` is a manifest file or directory, read directly (no
+subprocess). It reads multi-document YAML, and for every `kind: Secret` document emits one
+Finding per `data`/`stringData` entry, reporting `content_kind` (`certificate` / `private_key` /
+`opaque` / `undecodable`), and:
+
+- a certificate value is hashed and described by `adapters.certs.parser.load_pem_or_der`/`describe`
+  directly (not re-implemented), so a certificate seen inside a Secret and the same certificate
+  seen as a bare file correlate as the same object through `der_sha256` via
+  `ecdat.correlation.engine`, with zero Secret-specific correlation code.
+- a private-key value is loaded once with `cryptography`'s `load_pem_private_key`/
+  `load_der_private_key` to read algorithm/size/curve, then the key object is discarded
+  (`del key_obj`) — never returned, logged, or stored. `contains_private_key_material: KNOWN(True)`
+  is the explicit risk-signal field.
+- `kind: SealedSecret` / `kind: ExternalSecret` are recognised but never decrypted/resolved (the
+  value at rest is never the plaintext for either), reported as their own manifest kind with every
+  content field `UNKNOWN`.
+- a file under a directory holding `Chart.yaml`, named `kustomization.yaml`, or containing Go
+  template delimiters (`{{ ... }}`, not legal YAML) is detected and named in the visibility detail
+  as "not rendered" rather than parsed or silently skipped — no helm/kustomize invocation is
+  attempted (out of scope: a separate external-tool trust boundary, same reasoning DEV-004/DEV-013
+  used for sslyze).
+
+No new `rule_id` was registered: every field this adapter emits is a direct read off the manifest
+(a `data`/`stringData` entry, decoded and described), the same "KNOWN from direct observation
+needs no rule_id" reasoning `certs.adapter.CertificateAdapter._fields` already documents — nothing
+here is `derived_from` another field.
+
+Harness-side (out of ecdat's scope, recorded here only for cross-reference): `run_ecdat.py` gained
+a `k8s-secret` run over `targets/infrastructure/k8s/secrets/`, and `score_run.py`'s `configuration`
+surface join was generalised to accept a `k8ssecret:<path>:<key>` surface string (previously only
+`config:<root>:<property key>`) so INF-017 can be matched by its ground-truth `key: data.tls.key`.
+
+**Verification.** New tests in `tests/unit/adapters/test_k8s_secret.py` build small synthetic
+manifests in `tmp_path` (a throwaway EC key + self-signed cert via `cryptography`, never a
+recorded harness fixture) covering: a `kubernetes.io/tls` Secret's `tls.key`/`tls.crt`, an
+`Opaque` Secret, a `stringData` entry, undecodable base64, a `SealedSecret` (detect-only, all
+content UNKNOWN), and a Helm-chart-directory / `kustomization.yaml` file each reported as
+not-rendered rather than parsed. Every assertion checks `SecretLeakError` is raised if a test
+deliberately feeds the adapter a real PEM private key text and asserts the *serialised* result
+never contains the PEM block, base64 key bytes, or `-----BEGIN`. `python -m pytest -q` and every
+`tools/ci/check_*.py` are re-verified green in the same session this entry was added (see the
+session's final numbers).
