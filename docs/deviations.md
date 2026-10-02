@@ -710,3 +710,159 @@ call, exactly like `ecdat correlate` itself holds no run history. A caller that 
 report saved passes `--out` (CLI) or persists the JSON response itself; a real append-only
 per-supplier run history is the natural next step behind the same `RunStore`-shaped interface,
 not invented here without a concrete second consumer.
+
+## DEV-018 — `ecdat quickscan`: one command from a folder to a demo-ready summary (2026-09-27)
+
+**Issue.** An independent review of the CLI: a judge cannot point Pramāṇa at a folder and get a
+result quickly. Every `ecdat scan` needs `--adapter`, `--target-id`, `--confidence`,
+`--confidence-justification` (>= 20 chars) and per-adapter flags, adapters run one at a time,
+then `correlate`, `ledger-run`, `sector-report` and a CBOM export are separate commands with
+their own required flags. Not a build-plan.md phase; recorded here per CLAUDE.md's "any
+departure ... gets a DEV-NNN entry".
+
+**What was added.** `src/ecdat/quickscan.py` (`run_quickscan()`), a thin CLI wrapper
+(`ecdat.cli._quickscan`, the `quickscan` subparser) and `tests/unit/test_quickscan.py`.
+`ecdat quickscan <path> [--sector ...] [--out DIR] [--live-tls HOST:PORT ...] [--json]
+[--rollout-y-days N] [--scenario ID]`:
+
+1. **Discovers** which of the five folder-shaped adapters apply by walking the tree once
+   (`quickscan.discover()`): certificate/keystore extensions (reusing
+   `adapters.certs.parser.CERTIFICATE_SUFFIXES`) -> `certs-x509`; a YAML file containing
+   `kind: Secret` -> `k8s-secret`; an `application.yml`/`bootstrap.yml`-family file ->
+   `config-chain-spring`; a package manifest/lockfile/`.jar` -> `packages-trivy`; a source file
+   -> `source-semgrep`. `packages-trivy`/`source-semgrep` are subprocess-backed
+   (CLAUDE.md: "Every adapter MUST be able to invoke its tool ... Replay of a recorded file
+   is for tests and scoring only"), so each is additionally gated on its tool actually
+   resolving (`adapters/live_launcher.py`'s own `ECDAT_<TOOL>_LAUNCHER`/`ECDAT_<TOOL>_BIN`
+   resolution, checked with `shutil.which`) -- unavailable means SKIPPED with a one-line
+   reason, never faked and never run against a recorded fixture from this command.
+2. **Never invents a confidence number.** `data/base_confidence.yaml` has
+   `usable_row_count: 0` (OI-004/ADR-002) -- there is no cited per-adapter default to reuse.
+   quickscan applies one clearly labelled `ADAPTER_DECLARED` placeholder
+   (`QUICKSCAN_DEFAULT_CONFIDENCE = 0.5`) with an honest, >= 20-char justification stating
+   exactly that (same pattern as `tests/fixtures/correlation/demo_plan.json`'s own labelled
+   0.9). `ecdat scan --confidence/--confidence-justification` remains how a reviewed,
+   defensible number gets recorded. Target ids are generated deterministically from the
+   scanned path (a stable sha256-derived slug), never left for the operator to invent either.
+3. **Runs the existing pipeline, nothing duplicated.** Discovered adapters become plan
+   entries written to `<out>/quickscan_plan.json` and executed by `ecdat.cli._run_plan` --
+   the exact function `correlate`/`assemble` already call, not a second plan runner.
+   Results feed `ecdat.correlation.engine.correlate()`, `ecdat.assemble.assemble()`, and
+   `ecdat.recommend.engine.recommend()` (Part 8 recommendations need no scenario, so they
+   always run). `ecdat.risk.run.evaluate_run()` (ledger/risk bands), `ecdat.risk.sector
+   .sector_report()` and `ecdat.export.cyclonedx.build_bom()`/`export.signing.sign_bom()`
+   (CBOM, signed only when `ECDAT_SIGNING_KEY_PATH` is set, else written unsigned) all run
+   too -- but only when `--rollout-y-days` is supplied, because `rollout_Y_default` has no
+   cited default either (`data/scenarios.yaml`; `ledger-run --rollout-y-days` is
+   `required=True` for the same reason) and quickscan will not invent one. Omitting the flag
+   is an honest, stated skip ("ledger/risk banding ... skipped: --rollout-y-days has no cited
+   default ... and was not supplied"), not silence.
+4. **Output.** A short terminal summary (per-adapter outcome/finding counts, skipped adapters
+   with reasons, asset/quantum-vulnerable counts via `data.crypto_families.is_shor_broken`,
+   up to five riskiest assets with a one-line why, sector traffic-light counts when `--sector`
+   ran, where files were written) or `--json` for the same data machine-readable. Every stage's
+   own document is also written to `--out` (default `./pramana-out/<timestamp>`):
+   `quickscan_plan.json`, `scan/<adapter_id>.json` (via `cli._run_document`, the same
+   serialisation `scan` itself writes), `correlate.json` (via `cli._correlate_document`),
+   `ledger_subjects.json`, `recommendations.json`, and, when the ledger stage ran,
+   `ledger_records.json`, `sector_report.json` and `cbom.json`.
+5. **`--live-tls HOST:PORT ...`** adds `tls-endpoint --live` probes (openssl only, per
+   `adapters/tls/adapter.py`'s own scope). Passing the flag is the operator's consent
+   (`vantage="quickscan-cli"`, `consent=True`, recorded per Lock §5 row 1/CLAUDE.md); a host
+   is skipped with a reason if openssl does not resolve.
+
+**Config-chain-spring's property keys.** `adapters/config/adapter.py` deliberately never
+discovers which property keys matter -- that is upstream source-adapter work, out of its scope
+by design. quickscan cannot run `source-semgrep` first and feed its findings back in without
+becoming a second orchestrator, so it resolves a small, documented, TLS-relevant default key
+set (`QUICKSCAN_SPRING_PROPERTY_KEYS`: `server.ssl.protocol`, `server.ssl.enabled-protocols`,
+`server.ssl.ciphers`, `server.ssl.key-store-type`). This chooses which keys get looked up, never
+a value for them -- no different in kind from a human typing the same four `--property-key`
+flags on an `ecdat scan --adapter config-chain-spring` command line.
+
+**cli.py stayed thin.** All discovery/orchestration/rendering logic lives in
+`src/ecdat/quickscan.py`; `cli.py` gained one parser block and a ~20-line wrapper function
+(`_quickscan`) that calls `run_quickscan()` and prints its result, consistent with the file
+already being flagged for a later split.
+
+## DEV-019 — `ecdat quickscan`: three demo-blocking defects fixed (2026-09-28)
+
+**Issue.** A run of DEV-018's `quickscan` against a real target folder surfaced three defects
+that made the output useless for a demo. Recorded here per the same "any departure ... gets a
+DEV-NNN entry" rule DEV-018 cites.
+
+**1. `quantum-vulnerable: 0` despite RSA and EC certs/keys present.** Root cause:
+`adapters/certs/parser.py::_public_key_description` reports an EC key's `algorithm_family` as
+the literal string `"EC"` (the curve name is a separate field, `public_key_curve`, e.g.
+`"secp256r1"`), and `data/crypto_families.yaml` classifies elliptic-curve keys by curve
+(`P-256`, `P-384`, ...), not by the generic `"EC"` label -- `is_shor_broken("EC")` has no row
+and raised `NoCitedFamilyError`, which the old `_quantum_vulnerable_count` silently caught and
+counted as "not vulnerable". Fix: `quickscan._classify_family()` resolves the curve through
+`data.crypto_families.canonical_family()` first (its `family_aliases` rows, e.g.
+`"secp256r1" -> "P-256"`) before calling `is_shor_broken`. A curve with no alias row yet (e.g.
+`"secp384r1"`/P-384 -- only `secp256r1`/`prime256v1` are aliased today) has no citable path and
+is now reported as a separate, honest `unclassified` count rather than folded into "not
+vulnerable". `_family_counts()` replaces the old single-purpose counter; the summary now prints
+`vulnerable`/`not_vulnerable`/`unclassified` explicitly. Regression tests: RSA counts vulnerable,
+EC/P-256 (via its `secp256r1` curve alias) counts vulnerable, EC/P-384 counts unclassified (never
+silently 0) -- `tests/unit/test_quickscan.py`'s "regression: quantum-vulnerable classification"
+section.
+
+**2. Unreadable top-risk ids** (`certdir:..\ecdat-harness\targets|keyUsage|digitalSignature`).
+Confirmed genuine, not a quickscan bug: `function/classifier.py::classify_key_usage` correctly
+emits one `UsageContext` per keyUsage bit (§5.1 -- a certificate's `digitalSignature` and
+`keyCertSign` capabilities are distinct usage contexts), and `usage_context_id` is deliberately
+the internal `f"{surface_id}|keyUsage|{bit}"` string (a stable machine key), not a display label.
+The bug was rendering that internal id as if it were a name. Fix: `quickscan._cert_label_index()`
+builds `"cert:<der[:16]>" -> "<relative file path>  CN=<subject>  <algorithm>"` from the same
+certs-x509/k8s-secret findings already read (no new evidence), and
+`quickscan._relpath()`/`_relpath_in_text()` render every path relative to the scanned folder with
+forward slashes (fixing the mixed `..\..`/absolute/backslash display too). A source-semgrep call
+site (no cert to label) falls back to its own already-descriptive `protocol_context`
+(`"Cipher at <path>:<line>"`), relativized the same way, instead of the raw `usage_context_id`.
+`ledger_records.json` now carries both the raw `asset_id`/`usage_context_id` (machine-stable) and
+a human `asset_label`.
+
+**3. Every band `UNBOUNDED`, sector all `no_deadline`.** Root cause: nothing declared a
+data-class binding, so every subject was correctly `UNBOUNDED` per §5.3 ("nothing declared -> no
+binding -> UNBOUNDED with a closure task, never a default lifetime") -- the honest behaviour, not
+a bug, but one quickscan gave no way out of. Fix: `--context FILE` (or the literal word
+`example`) loads a `Declarations` file through the *existing* mechanism
+(`assemble.bridge.Declarations.load()`/`ecdat assemble --declarations`) unmodified -- no new
+field, no new model. Because `Declarations.binding_for()` matches an exact `surface`/`asset`
+string, and `certs-x509`'s `surface` (`f"certdir:{root}"`) and `tls-endpoint`'s
+(`f"tls:{host}:{port}"`) embed a path/host only known at run time, the shipped
+`examples/quickscan-context.example.yaml` uses `{target}`/`{host}`/`{port}` tokens that
+`quickscan._load_context()` substitutes into the *parsed* YAML document (not the raw text, so a
+Windows path's backslashes are never re-interpreted as YAML escapes inside a quoted scalar).
+Every `data_class` in the example is one of `data/data_lifetime.yaml`'s existing frozen §6
+`TEST.*` rows (`basis: TEST_CONSTANT`) -- that file's own header already says these are "NOT a
+claim about what any real organisation's retention policy says"; nothing new was invented.
+Without `--context`, quickscan now prints one explicit line explaining why bands stayed
+UNBOUNDED and how to supply one.
+
+Two more existing, unmodified ledger knobs were also exposed on `quickscan` (mirroring
+`ledger-run`'s own flags exactly, not new mechanisms) because a capability-only finding (a bare
+certificate on disk, never an observed handshake) legitimately needs both to receive any band at
+all: `--capture {SINCE_CONFIRMED,SINCE_POSSIBLE}` (§5.4; default SINCE_CONFIRMED, the
+conservative reading -- a keyUsage capability has no confirmed traffic date, so it stays
+UNBOUNDED under it by design) and `--accept-inferred` (a keyUsage-derived function is INFERRED,
+never observed).
+
+**Not fixed, and why -- a real remaining epistemic gap, not a quickscan bug.** Even with
+`--context`/`--capture SINCE_POSSIBLE`/`--accept-inferred` all set, a bare certificate's
+SIGNATURE_AUTH contexts (digitalSignature/keyCertSign) still band UNBOUNDED with reason "A = 15y
+but signed_at is unknown": `assemble.bridge._from_certs`/`_subject()` never populates
+`LedgerSubject.signed_at` for a certificate-derived subject (only a TLS handshake observation
+would confirm a genuine "signed at" moment) -- §5.6's `required_until = signed_at + A` correctly
+refuses to compute without it. Likewise a keyAgreement/keyEncipherment capability's confidentiality
+context has `algorithm=None` (`classify_key_usage` never states one -- a keyUsage bit says the key
+*can* be used for key agreement, not which algorithm a real handshake would negotiate), so
+`confidentiality_ledger.py::_shor_broken` correctly returns "unknown" rather than reading the
+certificate's own `public_key_algorithm` as if it were the negotiated one (exactly the
+capability-vs-usage conflation CLAUDE.md's "Package presence = capability, never usage" rule
+exists to prevent). A real observed `tls-endpoint --live-tls host:port` handshake is the only
+input that supplies both, so the fullest, most bandable quickscan demo pairs `--context` with
+`--live-tls` against a real listening endpoint -- inventing a `signed_at` or an assumed negotiated
+algorithm to make the demo output prettier was rejected as exactly the false certainty CLAUDE.md
+calls "the worst possible bug".

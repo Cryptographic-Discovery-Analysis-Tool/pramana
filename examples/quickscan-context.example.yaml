@@ -1,0 +1,61 @@
+# Example `ecdat quickscan --context` file (docs/deviations.md DEV-019).
+#
+# This is the exact format `ecdat assemble --declarations` and
+# `assemble.bridge.Declarations.load()` already read: {bindings: [{surface|asset,
+# data_class, declared_by}]}. `data_class` must name a row in
+# data/data_lifetime.yaml -- that file's own rule (Pramana_Ledger_Spec.md §5.3):
+# "usable only with a citation". Every `data_class` below is one of that file's
+# frozen §6 TEST.* rows (`basis: TEST_CONSTANT`); its own header says plainly
+# these are "NOT a claim about what any real organisation's retention policy
+# says... A deployment replaces this file with its own classification table".
+# This example exists so a quickscan demo has *some* declared lifetime to band
+# against instead of leaving every usage context UNBOUNDED for lack of one
+# (§5.3: "nothing declared -> no binding -> UNBOUNDED with a closure task,
+# never a default lifetime") -- copy it and put your own cited rows in.
+#
+# `{target}` is substituted by quickscan with the exact folder path you passed
+# it (adapters/certs/adapter.py's own `surface` is `certdir:<that path>`, which
+# is otherwise unpredictable ahead of a run and would make a portable example
+# file impossible). `{host}`/`{port}` are substituted from the first
+# `--live-tls host:port` you passed, if any.
+#
+# Coverage: only certs-x509 and source-semgrep findings currently become
+# ledger subjects at all (`assemble.bridge.assemble()`'s own scope --
+# k8s-secret and config-chain-spring findings have "no classifier path yet"
+# and stay unassembled regardless of this file; see docs/deviations.md). The
+# `tls-endpoint` row below only matters when quickscan runs with
+# `--live-tls host:port`.
+#
+# Which data_class per surface, and why: certs-x509's keyUsage bits classify
+# to SIGNATURE_AUTH for digitalSignature/keyCertSign (function/classifier.py
+# `_KEY_USAGE_FUNCTION`) -- the authenticity ledger (§5.6), which needs
+# `authenticity_lifetime_A`, not `secrecy_lifetime_X`. TEST.A_15Y ("long-lived
+# signed artefact") is the frozen row that carries a non-trivial A, so it is
+# used here rather than one of the X-only rows (TEST.X_7Y/X_1Y/...), which
+# would leave every certificate-derived context just as UNBOUNDED as no
+# context at all. source-semgrep call sites classify to KEY_ESTABLISHMENT/
+# KEY_TRANSPORT (confidentiality, needs X, not A) -- TEST.X_1Y. A negotiated
+# TLS handshake's authentication context is session-scoped by nature, hence
+# TEST.A_SESSION for tls-endpoint. No single frozen row states both a
+# meaningful X and a meaningful A together; that gap is data/data_lifetime.yaml's
+# own, not invented here.
+# `surface: source` below is a quickscan-only shorthand, not a literal
+# surface id `Declarations.binding_for` would ever match on its own
+# (`assemble.bridge._from_source` builds each call site's real surface id as
+# `f"source:{path}"`, one per file -- there is no bare "source" surface).
+# Fixed 2026-09-28 (quickscan demo root cause #2): `quickscan._load_context`
+# expands any binding literally spelled `surface: source` into one binding
+# per file a `source-semgrep` finding actually named in this run, so it
+# reaches every real per-file surface id instead of silently matching none.
+bindings:
+  - surface: "certdir:{target}"
+    data_class: TEST.A_15Y
+    declared_by: "quickscan example context (DEV-019) -- replace with your own cited data_lifetime.yaml row"
+
+  - surface: source
+    data_class: TEST.X_1Y
+    declared_by: "quickscan example context (DEV-019) -- replace with your own cited data_lifetime.yaml row"
+
+  - surface: "tls:{host}:{port}"
+    data_class: TEST.A_SESSION
+    declared_by: "quickscan example context (DEV-019) -- replace with your own cited data_lifetime.yaml row"

@@ -85,6 +85,55 @@ families:
       ("TODO-VERIFY: cite NIST IR 8547 once it is vendored into docs/").
       Table 4 lists finite-field DH as quantum-vulnerable at every strength.
 
+  - key: ECDH
+    shor_broken: true
+    usable: true
+    citation: "docs/architecture/ECDAT_Final_Architecture.md -- Step 1 quantum vulnerability tier table"
+    quote: "Broken by Shor | RSA, ECDSA, ECDH, DH, DSA | Replace — no parameter increase helps"
+    note: >-
+      Added 2026-09-28 (DEV-019 follow-up / quickscan demo): a JCA call site
+      naming the generic algorithm "ECDH" (e.g. `KeyAgreement.getInstance
+      ("ECDH")`, Java Security Standard Algorithm Names doc; see
+      docs/sources/Oracle_JavaSE17_Cipher_Transformation.md) names no curve,
+      so it cannot resolve to a curve-specific family (P-256, P-384, ...) --
+      it is its own family, generically Shor-broken per the architecture's
+      own tier table (cross-checked by NIST_IR_8547_ipd.md Table 4's
+      "Elliptic Curve DH and MQC [SP80056A]" row, same classification).
+
+  - key: DSA
+    shor_broken: true
+    usable: true
+    citation: "docs/architecture/ECDAT_Final_Architecture.md -- Step 1 quantum vulnerability tier table"
+    quote: "Broken by Shor | RSA, ECDSA, ECDH, DH, DSA | Replace — no parameter increase helps"
+    note: >-
+      Added 2026-09-28. `adapters/certs/parser.py::_public_key_description`
+      reports a DSA public key's algorithm_family as the literal "DSA",
+      which is this row's exact key -- no alias needed.
+
+  - key: AES
+    shor_broken: false
+    usable: true
+    citation: "docs/architecture/ECDAT_Final_Architecture.md -- Step 1 quantum vulnerability tier table"
+    quote: >-
+      "Weakened by Grover | AES-128, SHA-1, smaller hashes | Increase size —
+      Grover is quadratic, not exponential" and "Not quantum-affected |
+      AES-256, SHA-384/512 | No action"
+    note: >-
+      Added 2026-09-28 (DEV-019 follow-up / quickscan demo): AES is
+      symmetric, so it is never Shor-broken at any key size -- both rows
+      that mention it (AES-128 under Grover, AES-256 as unaffected) agree on
+      that, they differ only on whether Grover's quadratic speedup motivates
+      a larger key, which the ledger's `shor_broken` field does not encode.
+      `shor_broken: false` here means exactly "not broken by Shor", not "no
+      migration consideration at all" -- Grover-driven key-size guidance is
+      a separate policy question, out of this field's scope (Pramana_Ledger_
+      Spec.md §5.5: "Grover cases go to policy flags, not the ledger").
+      A specific size (AES-128 vs AES-256) is not distinguished here because
+      `adapters/source/semgrep.py`'s `algorithm` field for a Cipher call
+      site is the transformation string (e.g. "AES/GCM/NoPadding"), which
+      never states a key size -- only the key material would, and this
+      registry never reads key material.
+
 # Groups negotiated on the wire that are hybrid key establishment.
 #
 # `codepoint` and `deprecated` are cited separately from `citation`/`quote`
@@ -173,6 +222,50 @@ family_aliases:
     basis: NAMING_IDENTITY
     citation: "docs/architecture/Pramana_Ledger_Spec.md §6, row 4 ('P-256 ECDHE')"
     quote: "P-256 ECDHE, X=1y"
+
+  - key: secp384r1
+    family: P-384
+    usable: true
+    basis: NAMING_IDENTITY
+    citation: "docs/sources/IETF_RFC_5480_2009.md -- §2.1.1.1, correspondence note"
+    quote: >-
+      "Note that [FIPS186-3] refers to secp192r1 as P-192, secp224r1 as
+      P-224, secp256r1 as P-256, secp384r1 as P-384, and secp521r1 as P-521."
+    note: >-
+      Added 2026-09-28: DEV-019 recorded secp384r1/P-384 as "no alias row
+      yet" (unclassified, honestly, not silently 0) pending exactly this
+      citation. `cryptography`/OpenSSL report this curve as `secp384r1`; the
+      ledger-cited family row (data/crypto_families.yaml `P-384`, itself
+      cited to docs/sources/NIST_IR_8547_ipd.md Tables 2/4) is spelled
+      `P-384`. Same curve, two spellings.
+
+  - key: secp521r1
+    family: P-521
+    usable: true
+    basis: NAMING_IDENTITY
+    citation: "docs/sources/IETF_RFC_5480_2009.md -- §2.1.1.1, correspondence note"
+    quote: >-
+      "Note that [FIPS186-3] refers to secp192r1 as P-192, secp224r1 as
+      P-224, secp256r1 as P-256, secp384r1 as P-384, and secp521r1 as P-521."
+    note: >-
+      Added 2026-09-28, same reasoning as secp384r1 above, for the P-521 row.
+
+  - key: rsaEncryption
+    family: RSA
+    usable: true
+    basis: NAMING_IDENTITY
+    citation: "docs/sources/IETF_RFC_8017_2016.md -- Appendix A.1, RSA Key Representation"
+    quote: "rsaEncryption OBJECT IDENTIFIER ::= { pkcs-1 1 }"
+    note: >-
+      Added 2026-09-28: some tooling (and a raw X.509
+      SubjectPublicKeyInfo/PKCS#12 algorithm OID printed without translation)
+      reports an RSA public key's algorithm as the ASN.1 OID name
+      `rsaEncryption` rather than the plain string `RSA` that
+      `adapters/certs/parser.py::_public_key_description` itself emits for a
+      `cryptography`-parsed key. This alias covers that spelling wherever it
+      reaches the family classifier directly (e.g. a future adapter that
+      reads the OID name off the wire/ASN.1 without going through
+      `cryptography`'s typed key objects).
 
 # Previously "searched for and NOT found" here:
 #   - SecP256r1MLKEM768 / SecP384r1MLKEM1024: were named in no in-repo
