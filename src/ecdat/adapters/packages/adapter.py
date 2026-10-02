@@ -38,7 +38,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Callable
 
@@ -50,6 +50,14 @@ from ecdat.adapters.base import (
     Coverage,
     RawCapture,
     ScanTarget,
+)
+from ecdat.adapters.live_launcher import (
+    IdentityPathTranslator,
+    PathTranslator,
+    build_launched_argv,
+    resolve_launcher_prefix,
+    resolve_path_translator,
+    resolve_tool_bin,
 )
 from ecdat.adapters.packages.parser import ParsedPackage, parse
 from ecdat.model.epistemic import EpistemicState
@@ -95,6 +103,11 @@ class TrivyScanBundle:
     """
 
     stdout_json: str | None = None
+    #: Translates a path trivy printed in `stdout_json` back into this
+    #: process's own namespace (e.g. WSL `/mnt/c/...` -> `C:\...`). Defaults
+    #: to identity (no-op) for replay bundles built directly from a recorded
+    #: fixture, which never carry a foreign-namespace path.
+    path_translator: PathTranslator | None = None
 
 
 #: A callable that runs trivy against one target. Injected so that tests
@@ -104,7 +117,11 @@ ScanRunner = Callable[[ScanTarget], TrivyScanBundle]
 
 
 def build_trivy_argv(
-    locator: str, *, timeout_seconds: int, offline_db_path: str | None = None
+    locator: str,
+    *,
+    timeout_seconds: int,
+    offline_db_path: str | None = None,
+    trivy_bin: str = "trivy",
 ) -> list[str]:
     """The pinned argv for one live trivy invocation.
 
@@ -127,7 +144,7 @@ def build_trivy_argv(
     ever shelling out (see tests/unit/adapters/test_packages.py).
     """
     argv = [
-        "trivy", "rootfs", "--format", "json",
+        trivy_bin, "rootfs", "--format", "json",
         "--scanners", "vuln", "--list-all-pkgs", "--skip-db-update",
     ]
     if offline_db_path:
@@ -140,6 +157,10 @@ def live_scan_runner(
     *,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
     offline_db_path: str | None = None,
+    launcher_prefix: list[str] | None = None,
+    trivy_bin: str | None = None,
+    path_translator: PathTranslator | None = None,
+    subprocess_runner: Callable[..., "subprocess.CompletedProcess[str]"] = subprocess.run,
 ) -> ScanRunner:
     """Build a `ScanRunner` that actually shells out to trivy.
 
@@ -153,17 +174,44 @@ def live_scan_runner(
     function can enforce from inside a single `subprocess.run` call; what
     this function does enforce is the pinned, no-DB-fetch flag set above,
     the wall-clock timeout, and the output-size cap below.
+
+    `launcher_prefix`/`trivy_bin`/`path_translator` default to resolving
+    from `ECDAT_TRIVY_LAUNCHER`/`ECDAT_TOOL_LAUNCHER`, `ECDAT_TRIVY_BIN` and
+    the inferred translator (see `adapters.live_launcher`) when not passed
+    explicitly -- e.g. on a Windows dev machine where trivy only runs inside
+    WSL (OI-009), `ECDAT_TRIVY_LAUNCHER="wsl -e"` routes every invocation
+    through WSL with no code change here. `subprocess_runner` is injectable
+    so tests can assert the exact composed argv without ever shelling out.
     """
+    resolved_prefix = launcher_prefix if launcher_prefix is not None else resolve_launcher_prefix(
+        "trivy"
+    )
+    resolved_bin = trivy_bin if trivy_bin is not None else resolve_tool_bin("trivy", "trivy")
+    resolved_translator = (
+        path_translator
+        if path_translator is not None
+        else resolve_path_translator("trivy", resolved_prefix)
+    )
 
     def _run(target: ScanTarget) -> TrivyScanBundle:
-        argv = build_trivy_argv(
-            target.locator, timeout_seconds=timeout_seconds, offline_db_path=offline_db_path
+        tool_locator = resolved_translator.to_tool(target.locator)
+        tool_offline_db_path = (
+            resolved_translator.to_tool(offline_db_path) if offline_db_path else None
         )
+        tool_argv = build_trivy_argv(
+            tool_locator,
+            timeout_seconds=timeout_seconds,
+            offline_db_path=tool_offline_db_path,
+            trivy_bin=resolved_bin,
+        )
+        argv = build_launched_argv(resolved_prefix, tool_argv)
         try:
-            completed = subprocess.run(
+            completed = subprocess_runner(
                 argv,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=timeout_seconds,
                 check=False,
             )
@@ -176,7 +224,10 @@ def live_scan_runner(
             raise TrivyInvocationError("trivy stdout exceeded the output-size cap")
         if completed.returncode != 0:
             raise TrivyInvocationError(f"trivy exited {completed.returncode}")
-        return TrivyScanBundle(stdout_json=completed.stdout)
+        return TrivyScanBundle(
+            stdout_json=completed.stdout,
+            path_translator=resolved_translator,
+        )
 
     return _run
 
@@ -254,6 +305,19 @@ class PackagesAdapter(Adapter):
 
         document = json.loads(bundle.stdout_json)
         parsed = parse(document)
+        translator = bundle.path_translator or IdentityPathTranslator()
+        if parsed.artifact_name:
+            parsed = replace(parsed, artifact_name=translator.from_tool(parsed.artifact_name))
+        if parsed.packages:
+            parsed = replace(
+                parsed,
+                packages=tuple(
+                    replace(pkg, file_path=translator.from_tool(pkg.file_path))
+                    if pkg.file_path
+                    else pkg
+                    for pkg in parsed.packages
+                ),
+            )
 
         raw_ref = f"trivy://{target.locator}"
         raw_captures = (

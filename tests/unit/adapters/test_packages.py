@@ -17,6 +17,7 @@ from ecdat.adapters.packages.adapter import (
     PackagesAdapter,
     TrivyScanBundle,
     build_trivy_argv,
+    live_scan_runner,
 )
 from ecdat.model.epistemic import EpistemicState
 from ecdat.model.evidence import ConfidenceBasis
@@ -140,6 +141,85 @@ def test_live_argv_carries_an_offline_cache_dir_when_configured():
 
     assert "--cache-dir" in argv
     assert argv[argv.index("--cache-dir") + 1] == "/var/trivy-db"
+
+
+def test_live_argv_uses_a_configured_trivy_bin():
+    argv = build_trivy_argv("/some/target", timeout_seconds=60, trivy_bin="/usr/local/bin/trivy")
+    assert argv[0] == "/usr/local/bin/trivy"
+
+
+# --- (c2) live_scan_runner: launcher prefix + path translation, no real subprocess ----
+
+
+def test_live_scan_runner_composes_the_launcher_prefix_and_translates_the_locator(monkeypatch):
+    monkeypatch.setenv("ECDAT_TRIVY_LAUNCHER", "wsl -e")
+    monkeypatch.delenv("ECDAT_TOOL_LAUNCHER", raising=False)
+    monkeypatch.delenv("ECDAT_TRIVY_BIN", raising=False)
+    captured_argv = {}
+
+    def fake_run(argv, **kwargs):
+        captured_argv["argv"] = argv
+        return _FakeCompleted(stdout='{"SchemaVersion": 2, "ArtifactName": "."}', returncode=0)
+
+    runner = live_scan_runner(subprocess_runner=fake_run)
+    runner(ScanTarget(target_id="t", locator=r"C:\Atharv's Stack\ECDAT\ecdat-harness\target"))
+
+    argv = captured_argv["argv"]
+    assert argv[:2] == ["wsl", "-e"], "the resolved launcher prefix must lead the argv"
+    assert argv[2] == "trivy"
+    assert argv[-1] == "/mnt/c/Atharv's Stack/ECDAT/ecdat-harness/target", (
+        "the Windows locator must be translated into a WSL path before being handed to trivy"
+    )
+
+
+def test_live_scan_runner_translates_reported_paths_back_to_windows(monkeypatch):
+    monkeypatch.setenv("ECDAT_TRIVY_LAUNCHER", "wsl -e")
+    document = {
+        "SchemaVersion": 2,
+        "ArtifactName": "/mnt/c/repo/target",
+        "Results": [
+            {
+                "Target": "x",
+                "Packages": [
+                    {"Name": "bcprov-jdk18on", "FilePath": "/mnt/c/repo/target/app.jar"}
+                ],
+            }
+        ],
+    }
+
+    def fake_run(argv, **kwargs):
+        return _FakeCompleted(stdout=json.dumps(document), returncode=0)
+
+    runner = live_scan_runner(subprocess_runner=fake_run)
+    result = adapter(scan_runner=runner).run(
+        ScanTarget(target_id="t", locator=r"C:\repo\target")
+    )
+
+    assert result.coverage.scanned == (r"C:\repo\target",)
+    assert result.findings[0].fields["file_path"].value == r"C:\repo\target\app.jar"
+
+
+def test_live_scan_runner_with_no_launcher_leaves_paths_untouched(monkeypatch):
+    monkeypatch.delenv("ECDAT_TOOL_LAUNCHER", raising=False)
+    monkeypatch.delenv("ECDAT_TRIVY_LAUNCHER", raising=False)
+    captured_argv = {}
+
+    def fake_run(argv, **kwargs):
+        captured_argv["argv"] = argv
+        return _FakeCompleted(stdout='{"SchemaVersion": 2, "ArtifactName": "."}', returncode=0)
+
+    runner = live_scan_runner(subprocess_runner=fake_run)
+    runner(ScanTarget(target_id="t", locator="/some/linux/path"))
+
+    assert captured_argv["argv"][0] == "trivy"
+    assert captured_argv["argv"][-1] == "/some/linux/path"
+
+
+class _FakeCompleted:
+    def __init__(self, *, stdout: str, returncode: int, stderr: str = ""):
+        self.stdout = stdout
+        self.returncode = returncode
+        self.stderr = stderr
 
 
 # --- (d) a synthetic package with no Licenses key at all ----------------------
