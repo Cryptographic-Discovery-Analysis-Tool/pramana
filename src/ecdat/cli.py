@@ -115,6 +115,14 @@ from ecdat.export.signing import (
     private_key_pem,
     verify_bom,
 )
+from ecdat.export.cyclonedx import SchemaValidationError
+from ecdat.supplier.correlate import correlate_supplier
+from ecdat.supplier.intake import (
+    MalformedCbomError,
+    UnsupportedSpecVersionError,
+    import_supplier_cbom,
+)
+from ecdat.supplier.report import coverage_report
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 #: Every adapter that exists, keyed by its own declared `adapter_id`. Not
@@ -790,6 +798,125 @@ def _correlate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cbom_import_document(result, report) -> dict[str, Any]:
+    provenance = result.provenance
+    return {
+        "provenance": {
+            "supplier": provenance.supplier,
+            "file_sha256": provenance.file_sha256,
+            "imported_at": provenance.imported_at.isoformat(),
+            "signature_status": provenance.signature_status.value,
+            "signature_key_id": provenance.signature_key_id,
+            "cbom_serial_number": provenance.cbom_serial_number,
+            "cbom_version": provenance.cbom_version,
+            "cbom_spec_version": provenance.cbom_spec_version,
+            "source_tool": provenance.source_tool,
+            "source_tool_version": provenance.source_tool_version,
+        },
+        "declared_count": report.declared_count,
+        "corroborated_count": report.corroborated_count,
+        "conflicting_count": report.conflicting_count,
+        "declared_only_count": report.declared_only_count,
+        "observed_only_count": report.observed_only_count,
+        "sector": report.sector,
+        "sector_obligation_policy_keys": list(report.sector_obligation_policy_keys),
+        "quantum_vulnerable": [
+            {"bom_ref": q.bom_ref, "name": q.name, "family": q.family, "citation": q.citation}
+            for q in report.quantum_vulnerable
+        ],
+        "correlations": [
+            {
+                "supplier_component_bom_ref": c.supplier_component_bom_ref,
+                "supplier_component_name": c.supplier_component_name,
+                "matched_field": c.matched_field,
+                "matched_hash": c.matched_hash,
+                "our_asset_id": c.our_asset_id,
+                "status": c.status.value,
+                "declared_value": c.declared_value,
+                "observed_value": c.observed_value,
+                "reason": c.reason,
+            }
+            for c in report.correlations
+        ],
+    }
+
+
+def _cbom_import_cmd(args: argparse.Namespace) -> int:
+    """Task item 1-4: import a supplier's CycloneDX CBOM (validate, verify
+    signature if present, record provenance -- all DECLARED, never KNOWN),
+    then, when `--plan` names our own scan plan, correlate it against our
+    own inventory by content-identity hash and report coverage/gaps/
+    quantum-vulnerable declarations/sector obligations for the chosen
+    sector."""
+    try:
+        raw = Path(args.file).read_bytes()
+    except OSError as exc:
+        print(f"could not read {args.file!r}: {type(exc).__name__}", file=sys.stderr)
+        return 2
+
+    try:
+        result = import_supplier_cbom(raw, supplier=args.supplier)
+    except MalformedCbomError as exc:
+        print(f"malformed CBOM: {exc}", file=sys.stderr)
+        return 2
+    except UnsupportedSpecVersionError as exc:
+        print(f"unsupported: {exc}", file=sys.stderr)
+        return 2
+    except SchemaValidationError as exc:
+        print(f"schema invalid: {exc}", file=sys.stderr)
+        return 2
+
+    our_assets: tuple = ()
+    if args.plan:
+        scan_results = _run_plan(args.plan)
+        if isinstance(scan_results, int):
+            return scan_results
+        try:
+            our_assets = correlate(scan_results).assets
+        except ForbiddenEdgeError as exc:
+            print(f"correlation refused: {exc}", file=sys.stderr)
+            return 3
+
+    correlations = correlate_supplier(result.components, our_assets)
+    try:
+        report = coverage_report(
+            supplier=args.supplier,
+            as_of=result.provenance.imported_at,
+            components=result.components,
+            correlations=correlations,
+            sector_key=args.sector,
+        )
+    except UnknownSectorError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    document = _cbom_import_document(result, report)
+    output = json.dumps(document, indent=2)
+    if args.out:
+        Path(args.out).write_text(output + "\n", encoding="utf-8")
+
+    if args.json:
+        print(output)
+        return 0
+
+    print(
+        f"supplier={args.supplier!r}  signature={result.provenance.signature_status.value}  "
+        f"declared={report.declared_count}  corroborated={report.corroborated_count}  "
+        f"conflicting={report.conflicting_count}  declared_only={report.declared_only_count}  "
+        f"observed_only={report.observed_only_count}"
+    )
+    if report.quantum_vulnerable:
+        print(f"  {len(report.quantum_vulnerable)} declared component(s) cited quantum-vulnerable:")
+        for q in report.quantum_vulnerable:
+            print(f"    {q.name} ({q.family}) -- {q.citation}")
+    for c in report.correlations:
+        if c.status.value in ("CONFLICTING",):
+            print(f"  CONFLICTING: {c.supplier_component_name or c.our_asset_id}: {c.reason}")
+    if args.out:
+        print(f"  -> {args.out}")
+    return 0
+
+
 # --- run store: evaluate a ledger, save it, list runs, diff two of them ----
 #
 # build-plan.md P13. `store/` is a real repository behind the RunStore
@@ -1323,6 +1450,31 @@ def main(argv: list[str] | None = None) -> int:
     )
     sector_report_parser.add_argument("--json", action="store_true")
     sector_report_parser.set_defaults(func=_sector_report_cmd)
+
+    cbom_import_parser = subparsers.add_parser(
+        "cbom-import",
+        help="import a supplier/vendor CycloneDX CBOM as DECLARED evidence, optionally "
+        "correlated against our own scan plan by content-identity hash (SIH26164)",
+    )
+    cbom_import_parser.add_argument("--supplier", required=True, help="supplier/vendor name")
+    cbom_import_parser.add_argument("--file", required=True, help="path to the supplier's CycloneDX CBOM JSON")
+    cbom_import_parser.add_argument(
+        "--plan",
+        default=None,
+        help="optional JSON scan plan (same shape as `correlate --plan`) to correlate the "
+        "supplier's declared components against our own inventory; omit to report the "
+        "supplier's declared components on their own, with everything DECLARED_ONLY",
+    )
+    cbom_import_parser.add_argument(
+        "--sector",
+        default=None,
+        choices=sorted(available_sectors()),
+        help="optional sector lens (SIH26164): which sector's cited obligations "
+        "(data/sector_profiles.yaml) the supplier's assets fall under",
+    )
+    cbom_import_parser.add_argument("--out", help="write the coverage report here")
+    cbom_import_parser.add_argument("--json", action="store_true")
+    cbom_import_parser.set_defaults(func=_cbom_import_cmd)
 
     runs_parser = subparsers.add_parser("runs", help="list runs in a store (build-plan.md P13)")
     runs_parser.add_argument("--store-dir", required=True)

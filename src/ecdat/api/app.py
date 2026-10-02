@@ -26,6 +26,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from ecdat.adapters.base import ScanTarget
 from ecdat.adapters.certs.adapter import CertificateAdapter
@@ -65,6 +66,13 @@ from ecdat.risk.sector import (
 from ecdat.risk.sensitivity import sensitivity_for
 from ecdat.security.audit import AuditLog, InMemoryAuditLog, Verb, entry_for
 from ecdat.security.auth import AuthError, InsufficientRoleError, Principal, Role, TokenRegistry
+from ecdat.supplier.correlate import correlate_supplier
+from ecdat.supplier.intake import (
+    MalformedCbomError,
+    UnsupportedSpecVersionError,
+    import_supplier_cbom,
+)
+from ecdat.supplier.report import coverage_report
 
 SubjectsProvider = Callable[[], list[LedgerSubject]]
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -114,6 +122,18 @@ def load_correlation_report(plan_path: Path) -> CorrelationReport:
         target = ScanTarget(target_id=entry["target_id"], locator=str(base_dir / entry["input"]))
         results.append(adapter.run(target))
     return correlate(results)
+
+
+class SupplierCbomImportRequest(BaseModel):
+    """POST /api/suppliers/import body. `cbom_json` is the supplier's CBOM
+    file's exact text (never a re-serialised dict) so the recorded
+    provenance SHA-256 is over the same bytes the operator uploaded --
+    `supplier/intake.py::import_supplier_cbom` hashes exactly what it is
+    handed."""
+
+    supplier: str
+    cbom_json: str
+    sector: str | None = None
 
 
 def default_correlation_report() -> CorrelationReport:
@@ -552,6 +572,85 @@ def create_app(
                 for status_value in ("on_track", "at_risk", "overdue", "no_deadline")
                 if any(s.status.value == status_value for s in statuses)
             },
+        }
+
+    @app.post("/api/suppliers/import")
+    def suppliers_import(
+        body: SupplierCbomImportRequest,
+        principal: Principal = Depends(require_exporter),
+    ) -> dict[str, Any]:
+        """Task items 1-5: import a supplier CycloneDX CBOM as DECLARED
+        evidence (validated, signature-checked, provenance-recorded), then
+        correlate it against `correlation_report.assets` -- the same asset
+        view `/api/graph` already shows -- by content-identity hash only.
+        `require_exporter` because this is the closest of the two roles
+        this API defines to "may submit data", not because it exports
+        anything; `security/auth.py` has no separate write role today (see
+        the DEV entry for this feature)."""
+        try:
+            result = import_supplier_cbom(
+                body.cbom_json.encode("utf-8"), supplier=body.supplier
+            )
+        except MalformedCbomError as error:
+            raise HTTPException(status_code=400, detail=f"malformed CBOM: {error}") from error
+        except UnsupportedSpecVersionError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        except SchemaValidationError as error:
+            raise HTTPException(status_code=422, detail=f"schema invalid: {error}") from error
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+
+        correlations = correlate_supplier(result.components, correlation_report.assets)
+        try:
+            report = coverage_report(
+                supplier=body.supplier,
+                as_of=result.provenance.imported_at,
+                components=result.components,
+                correlations=correlations,
+                sector_key=body.sector,
+            )
+        except UnknownSectorError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+
+        provenance = result.provenance
+        return {
+            "provenance": {
+                "supplier": provenance.supplier,
+                "file_sha256": provenance.file_sha256,
+                "imported_at": provenance.imported_at.isoformat(),
+                "signature_status": provenance.signature_status.value,
+                "signature_key_id": provenance.signature_key_id,
+                "cbom_serial_number": provenance.cbom_serial_number,
+                "cbom_version": provenance.cbom_version,
+                "cbom_spec_version": provenance.cbom_spec_version,
+                "source_tool": provenance.source_tool,
+                "source_tool_version": provenance.source_tool_version,
+            },
+            "declared_count": report.declared_count,
+            "corroborated_count": report.corroborated_count,
+            "conflicting_count": report.conflicting_count,
+            "declared_only_count": report.declared_only_count,
+            "observed_only_count": report.observed_only_count,
+            "sector": report.sector,
+            "sector_obligation_policy_keys": list(report.sector_obligation_policy_keys),
+            "quantum_vulnerable": [
+                {"bom_ref": q.bom_ref, "name": q.name, "family": q.family, "citation": q.citation}
+                for q in report.quantum_vulnerable
+            ],
+            "correlations": [
+                {
+                    "supplier_component_bom_ref": c.supplier_component_bom_ref,
+                    "supplier_component_name": c.supplier_component_name,
+                    "matched_field": c.matched_field,
+                    "matched_hash": c.matched_hash,
+                    "our_asset_id": c.our_asset_id,
+                    "status": c.status.value,
+                    "declared_value": c.declared_value,
+                    "observed_value": c.observed_value,
+                    "reason": c.reason,
+                }
+                for c in report.correlations
+            ],
         }
 
     @app.get("/api/records/{record_id:path}")

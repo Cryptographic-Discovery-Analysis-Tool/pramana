@@ -164,3 +164,41 @@ PKI"), and its `tls_1_2_cipher_suites` expectation
 (`TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256` only) was left unchanged — it was
 always correct; this recording was wrong. `python -m pytest -q` and every
 `tools/ci/check_*.py` pass clean after this fix.
+
+**Re-recorded 2026-09-27 (harness PKI date bump, not a fresh staleness bug):**
+`ecdat-harness/harness/build/generate-pki.sh`'s fixed `NOT_BEFORE` moved from
+`2026-09-01` to `2026-09-27` (pay-edge's leaf was about to run past its
+documented 90-day window against real wall-clock; see
+`ecdat-harness/README.md` "Deterministic PKI" and `docs/open-issues.md`
+OI-019) and `harness/build/bump-pki.sh` was added as the one-command way to
+do that going forward. Every cert byte pay-edge's leaf carries therefore
+changed (new `notBefore`/`notAfter`, same key/subject/extensions), so this
+fixture was re-recorded exactly as above: local
+```
+awk 'BEGIN{n=0} /BEGIN CERTIFICATE/{n++} {print > ("cert" n ".pem")}' \
+  ../../../../../../ecdat-harness/targets/payments/edge-lb/certs/pay-edge.pem
+openssl s_server -accept 8443 \
+  -cert cert1.pem \
+  -key ../../../../../../ecdat-harness/targets/payments/edge-lb/certs/pay-edge.pem \
+  -cert_chain cert2.pem \
+  -cipher "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384" \
+  -no_ssl3 -no_tls1 -no_tls1_1 \
+  -www &
+python tier_a_edge_lb_scan.py > tier_a_edge_lb.raw.json 2> tier_a_edge_lb.stderr.log
+```
+(openssl 3.5.4, sslyze 6.2.0, s_server killed immediately after). The new
+leaf `fingerprint_sha256` is `SCSAXNDkHMtxGw2mDrgz/wR2lcRStBYBPYoIU8DMe7A=`
+(base64), which decodes to der_sha256
+`4824805cd0e41ccb711b0da60eb833ff047695c452b416013d8a0853c0cc7bb0` hex —
+independently confirmed against
+`openssl x509 -in ecdat-harness/harness/build/out/pay-edge/cert.pem -outform DER | sha256sum`.
+The SPKI hash is **unchanged**
+(`133afc2d59061ec4a826fbc664de07721bc086f5c05946dac254e70d3a935200` hex — the
+key itself is seed-derived, not date-derived). Accepted suites are unchanged
+too: exactly one TLS 1.2 suite (`TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256`)
+and the same TLS 1.3 set, chain length 2. `tests/unit/adapters/test_tls.py`'s
+`leaf_der_sha256`/`der_sha256` constants were updated to the new value;
+`spki_sha256` was left as-is (genuinely unchanged). `python -m pytest -q` and
+every `tools/ci/check_*.py` pass clean after this fix. See
+`harness/build/bump-pki.sh`'s header comment for the full re-record
+checklist to repeat next time this PKI is bumped.
